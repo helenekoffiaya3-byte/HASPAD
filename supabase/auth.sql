@@ -38,14 +38,16 @@ CREATE POLICY profiles_self_select ON profiles FOR SELECT TO authenticated USING
 DROP POLICY IF EXISTS profiles_self_update ON profiles;
 CREATE POLICY profiles_self_update ON profiles FOR UPDATE TO authenticated USING (id=(select auth.uid())) WITH CHECK (id=(select auth.uid()));
 
-DROP POLICY IF EXISTS site_members_select ON site_members;
-CREATE POLICY site_members_select ON site_members FOR SELECT TO authenticated
-USING (EXISTS (SELECT 1 FROM site_members me WHERE me.site_id=site_members.site_id AND me.user_id=(select auth.uid())));
+-- No recursive RLS predicates: a member may read only their own membership.
+-- Server-side collaboration queries use the protected backend service client.
+DROP POLICY IF EXISTS site_members_self_select ON site_members;
+CREATE POLICY site_members_self_select ON site_members FOR SELECT TO authenticated
+USING (user_id=(select auth.uid()));
 
 DROP POLICY IF EXISTS site_members_owner_manage ON site_members;
 CREATE POLICY site_members_owner_manage ON site_members FOR ALL TO authenticated
-USING (EXISTS (SELECT 1 FROM site_members me WHERE me.site_id=site_members.site_id AND me.user_id=(select auth.uid()) AND me.role='owner'))
-WITH CHECK (EXISTS (SELECT 1 FROM site_members me WHERE me.site_id=site_members.site_id AND me.user_id=(select auth.uid()) AND me.role='owner'));
+USING (EXISTS (SELECT 1 FROM sites s WHERE s.id=site_members.site_id AND s.user_id=(select auth.uid())))
+WITH CHECK (EXISTS (SELECT 1 FROM sites s WHERE s.id=site_members.site_id AND s.user_id=(select auth.uid())));
 
 CREATE OR REPLACE FUNCTION create_profile_for_user()
 RETURNS TRIGGER LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $$
@@ -70,8 +72,7 @@ DECLARE r auth_rate_limits%ROWTYPE;
 BEGIN
   SELECT * INTO r FROM auth_rate_limits WHERE key=p_key FOR UPDATE;
   IF NOT FOUND THEN
-    INSERT INTO auth_rate_limits(key,window_started_at,attempts)
-    VALUES(p_key,now(),1);
+    INSERT INTO auth_rate_limits(key,window_started_at,attempts) VALUES(p_key,now(),1);
     RETURN TRUE;
   END IF;
   IF r.window_started_at + make_interval(secs=>p_window_seconds) <= now() THEN
@@ -83,3 +84,6 @@ BEGIN
   RETURN TRUE;
 END;
 $$;
+
+REVOKE ALL ON FUNCTION consume_auth_rate_limit(TEXT,INTEGER,INTEGER) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION consume_auth_rate_limit(TEXT,INTEGER,INTEGER) TO service_role;
