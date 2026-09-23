@@ -1,0 +1,1 @@
+export function mountCanvas(iframe,root){if(!iframe)throw new Error("Canvas iframe requis");iframe.addEventListener("load",()=>iframe.contentWindow?.postMessage({type:"HASPAD_INIT",root},"*"));}
