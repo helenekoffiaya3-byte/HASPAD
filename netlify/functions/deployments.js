@@ -9,7 +9,8 @@ export default async(req)=>{
   const {data:{user}}=await db.auth.getUser(token);if(!user)return {statusCode:401,body:"Unauthorized"};
   let body;try{body=JSON.parse(req.body||"{}")}catch{return {statusCode:400,body:"JSON invalide"}}
   const {site_id,pages}=body;if(!site_id||!Array.isArray(pages))return {statusCode:400,body:"site_id et pages requis"};
-  const {data:site}=await db.from("sites").select("id").eq("id",site_id).eq("user_id",user.id).maybeSingle();if(!site)return {statusCode:404,body:"Site introuvable"};
+  const {data:member}=await db.from("site_members").select("role").eq("site_id",site_id).eq("user_id",user.id).maybeSingle();if(!member)return {statusCode:403,body:"Accès refusé à ce site."};
+  if(!["owner","editor"].includes(member.role))return {statusCode:403,body:"Droits insuffisants."};
   try{
     const compiled=pages.map(p=>({id:p.id,slug:p.slug,title:p.title,html:compilePage(BlockNodeSchema.parse(p.root))}));
     const snapshot={siteId:site_id,pages:compiled};
