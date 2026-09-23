@@ -18,6 +18,8 @@
     "passport-google-oauth20": "^2.0.0",
     "passport-github2": "^1.2.0",
     "passport-gitlab2": "^5.0.0",
-    "passport-bitbucket-oauth2": "^1.2.0"
+    "passport-bitbucket-oauth2": "^1.2.0",
+    "axios": "^1.12.2",
+    "googleapis": "^160.0.0"
   }
 }
