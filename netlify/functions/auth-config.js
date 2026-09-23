@@ -1,0 +1,1 @@
+export default async()=>({statusCode:200,headers:{"content-type":"application/json","cache-control":"public, max-age=300"},body:JSON.stringify({supabaseUrl:process.env.SUPABASE_URL,supabasePublishableKey:process.env.SUPABASE_PUBLISHABLE_KEY||process.env.SUPABASE_ANON_KEY})});
