@@ -13,6 +13,11 @@
     "dotenv": "^17.2.2",
     "express": "^5.1.0",
     "jsonwebtoken": "^9.0.2",
-    "pg": "^8.16.3"
+    "pg": "^8.16.3",
+    "passport": "^0.7.0",
+    "passport-google-oauth20": "^2.0.0",
+    "passport-github2": "^1.2.0",
+    "passport-gitlab2": "^5.0.0",
+    "passport-bitbucket-oauth2": "^1.2.0"
   }
 }
