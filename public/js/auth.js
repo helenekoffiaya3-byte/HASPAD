@@ -1,33 +1,8 @@
-let accessToken=null;
-let currentUser=null;
-
-export function setSession({accessToken:token,user=null}){accessToken=token||null;currentUser=user||null;}
-export function clearSession(){accessToken=null;currentUser=null;}
-export function getAccessToken(){return accessToken;}
-export function getUser(){return currentUser;}
-
-export async function api(path,options={}){
-  const headers={"content-type":"application/json",...(options.headers||{})};
-  if(accessToken)headers.Authorization=`Bearer ${accessToken}`;
-  let res=await fetch(path,{...options,headers,credentials:"include"});
-  if(res.status===401&&path!=="/api/auth/refresh"){
-    const refreshed=await fetch("/api/auth/refresh",{method:"POST",credentials:"include"});
-    if(refreshed.ok){
-      const data=await refreshed.json();accessToken=data.accessToken;
-      headers.Authorization=`Bearer ${accessToken}`;
-      res=await fetch(path,{...options,headers,credentials:"include"});
-    }
-  }
-  return res;
-}
-
-export async function refreshSession(){
-  const res=await fetch("/api/auth/refresh",{method:"POST",credentials:"include"});
-  if(!res.ok){clearSession();return false;}
-  const data=await res.json();accessToken=data.accessToken;return true;
-}
-
-export async function logout(){
-  await fetch("/api/auth/logout",{method:"POST",credentials:"include"});
-  clearSession();
-}
+const TOKEN_KEY="haspad:access_token",REFRESH_KEY="haspad:refresh_token";
+export const getAccessToken=()=>sessionStorage.getItem(TOKEN_KEY);
+export const getUser=()=>{try{return JSON.parse(sessionStorage.getItem("haspad:user")||"null")}catch{return null}};
+export const setSession=s=>{if(s.accessToken)sessionStorage.setItem(TOKEN_KEY,s.accessToken);if(s.refreshToken)sessionStorage.setItem(REFRESH_KEY,s.refreshToken);if(s.user)sessionStorage.setItem("haspad:user",JSON.stringify(s.user));};
+export const clearSession=()=>{sessionStorage.removeItem(TOKEN_KEY);sessionStorage.removeItem(REFRESH_KEY);sessionStorage.removeItem("haspad:user");};
+export async function api(path,options={}){const h=new Headers(options.headers||{}),token=getAccessToken();if(options.body&&!h.has("content-type"))h.set("content-type","application/json");if(token)h.set("authorization",`Bearer ${token}`);let r=await fetch(path,{...options,headers:h});if(r.status===401&&path!=="/api/auth-refresh"){const refresh=sessionStorage.getItem(REFRESH_KEY);if(refresh){const rr=await fetch("/api/auth-refresh",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({refreshToken:refresh})});if(rr.ok){setSession(await rr.json());h.set("authorization",`Bearer ${getAccessToken()}`);r=await fetch(path,{...options,headers:h});}}}return r;}
+export async function refreshSession(){const refresh=sessionStorage.getItem(REFRESH_KEY);if(!refresh){clearSession();return false}const r=await fetch("/api/auth-refresh",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({refreshToken:refresh})});if(!r.ok){clearSession();return false}setSession(await r.json());return true;}
+export async function logout(){const token=getAccessToken();if(token)await fetch("/api/auth-logout",{method:"POST",headers:{authorization:`Bearer ${token}`}});clearSession();}
