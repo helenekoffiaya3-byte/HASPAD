@@ -4,6 +4,6 @@ export default async(req)=>{
   let body;try{body=JSON.parse(req.body||"{}")}catch{return json(400,{error:"JSON invalide."})}
   const email=normalizeEmail(body.email);
   if(!validEmail(email))return json(400,{error:"Adresse email invalide."});
-  await publicDb.auth.resetPasswordForEmail(email,{redirectTo:`${process.env.FRONTEND_URL||""}/reset-password`});
+  await publicDb.auth.resetPasswordForEmail(email,{redirectTo:`${process.env.FRONTEND_URL||process.env.URL}/reset-password.html`});
   return json(200,{message:"Si ce compte existe, un email de réinitialisation a été envoyé."});
 };
