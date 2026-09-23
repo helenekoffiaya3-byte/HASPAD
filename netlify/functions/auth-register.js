@@ -8,6 +8,7 @@ export default async(req)=>{
   try{
     const {data,error}=await publicDb.auth.signUp({email,password,options:{data:{full_name:fullName||null}}});
     if(error)return json(error.status===422||/already registered/i.test(error.message)?409:400,{error:"Impossible de créer ce compte."});
+    await admin.from("profiles").upsert({id:data.user.id,full_name:fullName||null,is_email_verified:data.user.email_confirmed_at!=null},{onConflict:"id"});
     const site=await provisionInitialSite(data.user,{siteName});
     if(data.session)return json(201,{message:"Compte et site créés avec succès.",user:{id:data.user.id,email:data.user.email,fullName:fullName||null},accessToken:data.session.access_token,initialSite:site},{ "set-cookie":refreshCookie(data.session.refresh_token)});
     return json(201,{message:"Compte créé. Vérifiez votre email pour activer la connexion.",user:{id:data.user.id,email:data.user.email,fullName:fullName||null},emailVerificationRequired:true,initialSite:site});
