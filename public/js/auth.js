@@ -1,0 +1,1 @@
+const key="haspad_session";export function saveSession(v){localStorage.setItem(key,JSON.stringify(v));}export function getSession(){try{return JSON.parse(localStorage.getItem(key)||"null");}catch{return null;}}export function clearSession(){localStorage.removeItem(key);}
