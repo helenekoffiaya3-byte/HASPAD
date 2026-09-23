@@ -46,25 +46,6 @@ CREATE POLICY site_members_owner_manage ON site_members FOR ALL TO authenticated
 USING (EXISTS (SELECT 1 FROM sites s WHERE s.id=site_members.site_id AND s.user_id=(select auth.uid())))
 WITH CHECK (EXISTS (SELECT 1 FROM sites s WHERE s.id=site_members.site_id AND s.user_id=(select auth.uid())));
 
-CREATE OR REPLACE FUNCTION create_profile_for_user()
-RETURNS TRIGGER LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $$
-BEGIN
-  INSERT INTO profiles(id,full_name,is_email_verified)
-  VALUES (NEW.id,COALESCE(NEW.raw_user_meta_data->>'full_name',NEW.raw_user_meta_data->>'name'),NEW.email_confirmed_at IS NOT NULL)
-  ON CONFLICT (id) DO UPDATE SET
-    full_name=COALESCE(EXCLUDED.full_name,profiles.full_name),
-    is_email_verified=EXCLUDED.is_email_verified,
-    updated_at=now();
-  RETURN NEW;
-END;
-$$;
-
-REVOKE ALL ON FUNCTION create_profile_for_user() FROM PUBLIC;
-
-DROP TRIGGER IF EXISTS on_auth_user_created_haspad ON auth.users;
-CREATE TRIGGER on_auth_user_created_haspad AFTER INSERT ON auth.users
-FOR EACH ROW EXECUTE FUNCTION create_profile_for_user();
-
 CREATE OR REPLACE FUNCTION consume_auth_rate_limit(p_key TEXT,p_max INTEGER,p_window_seconds INTEGER)
 RETURNS BOOLEAN LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $$
 DECLARE r auth_rate_limits%ROWTYPE;
