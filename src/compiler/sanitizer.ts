@@ -1,0 +1,1 @@
+export function sanitizeCss(value:string){if(/[<>]/.test(value)||/url\s*\(/i.test(value)||/@import/i.test(value)||/expression\s*\(/i.test(value))throw new Error("CSS non autorisé");return value;}
