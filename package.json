@@ -1,1 +1,18 @@
-{"name":"haspad","version":"1.0.0","private":true,"scripts":{"check":"tsc --noEmit","dev":"netlify dev","start":"netlify dev"},"dependencies":{"@supabase/supabase-js":"^2.57.0","@supabase/ssr":"^0.7.0","zod":"^3.25.0"},"devDependencies":{"typescript":"^5.6.0","@types/node":"^22.0.0","netlify-cli":"^23.0.0"}}
+{
+  "name": "haspad-backend",
+  "version": "1.0.0",
+  "private": true,
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "dependencies": {
+    "bcrypt": "^6.0.0",
+    "cookie": "^1.0.2",
+    "dotenv": "^17.2.2",
+    "express": "^5.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "pg": "^8.16.3"
+  }
+}
