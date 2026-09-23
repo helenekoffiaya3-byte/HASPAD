@@ -1,0 +1,11 @@
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+CREATE TABLE sites(id UUID PRIMARY KEY DEFAULT gen_random_uuid(),user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,name TEXT NOT NULL,subdomain TEXT NOT NULL UNIQUE,custom_domain TEXT UNIQUE,status TEXT NOT NULL DEFAULT 'draft' CHECK(status IN ('draft','published','archived')),settings JSONB NOT NULL DEFAULT '{}'::jsonb,created_at TIMESTAMPTZ NOT NULL DEFAULT now(),updated_at TIMESTAMPTZ NOT NULL DEFAULT now());
+CREATE TABLE pages(id UUID PRIMARY KEY DEFAULT gen_random_uuid(),site_id UUID NOT NULL REFERENCES sites(id) ON DELETE CASCADE,slug TEXT NOT NULL,title TEXT NOT NULL,seo JSONB NOT NULL DEFAULT '{}'::jsonb,root JSONB NOT NULL,created_at TIMESTAMPTZ NOT NULL DEFAULT now(),updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),UNIQUE(site_id,slug));
+CREATE TABLE assets(id UUID PRIMARY KEY DEFAULT gen_random_uuid(),site_id UUID NOT NULL REFERENCES sites(id) ON DELETE CASCADE,path TEXT NOT NULL,mime_type TEXT NOT NULL,size_bytes BIGINT NOT NULL DEFAULT 0,metadata JSONB NOT NULL DEFAULT '{}'::jsonb,created_at TIMESTAMPTZ NOT NULL DEFAULT now(),UNIQUE(site_id,path));
+CREATE TABLE environment_configs(id UUID PRIMARY KEY DEFAULT gen_random_uuid(),site_id UUID NOT NULL REFERENCES sites(id) ON DELETE CASCADE,key TEXT NOT NULL,value_encrypted TEXT NOT NULL,created_at TIMESTAMPTZ NOT NULL DEFAULT now(),UNIQUE(site_id,key));
+CREATE TABLE deployments(id UUID PRIMARY KEY DEFAULT gen_random_uuid(),site_id UUID NOT NULL REFERENCES sites(id) ON DELETE CASCADE,version_hash CHAR(64) NOT NULL,status TEXT NOT NULL CHECK(status IN ('queued','building','ready','failed')),snapshot JSONB NOT NULL DEFAULT '{}'::jsonb,error_log TEXT,is_active BOOLEAN NOT NULL DEFAULT FALSE,created_at TIMESTAMPTZ NOT NULL DEFAULT now());
+CREATE UNIQUE INDEX idx_active_deployment ON deployments(site_id) WHERE is_active=TRUE;
+CREATE INDEX idx_sites_subdomain ON sites(subdomain);
+CREATE INDEX idx_sites_custom_domain ON sites(custom_domain);
+CREATE INDEX idx_pages_site_slug ON pages(site_id,slug);
+CREATE INDEX idx_deployments_site ON deployments(site_id);
