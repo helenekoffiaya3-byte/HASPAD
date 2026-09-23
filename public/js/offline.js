@@ -1,0 +1,1 @@
+const P="haspad:draft:";export function saveDraft(id,d){localStorage.setItem(P+id,JSON.stringify(d));}export function loadDraft(id){try{return JSON.parse(localStorage.getItem(P+id)||"null");}catch{return null;}}export function clearDraft(id){localStorage.removeItem(P+id);}
