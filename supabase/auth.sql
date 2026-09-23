@@ -1,6 +1,5 @@
 -- HASPAD authentication / tenant membership layer.
--- Authentication credentials and OAuth identities are owned by Supabase Auth.
--- Do NOT duplicate passwords in public tables.
+-- Supabase Auth owns passwords and OAuth identities.
 
 CREATE TABLE IF NOT EXISTS profiles (
   id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
@@ -35,52 +34,24 @@ ALTER TABLE site_members ENABLE ROW LEVEL SECURITY;
 ALTER TABLE auth_rate_limits ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS profiles_self_select ON profiles;
-CREATE POLICY profiles_self_select ON profiles FOR SELECT TO authenticated
-USING (id=(select auth.uid()));
-
+CREATE POLICY profiles_self_select ON profiles FOR SELECT TO authenticated USING (id=(select auth.uid()));
 DROP POLICY IF EXISTS profiles_self_update ON profiles;
-CREATE POLICY profiles_self_update ON profiles FOR UPDATE TO authenticated
-USING (id=(select auth.uid())) WITH CHECK (id=(select auth.uid()));
+CREATE POLICY profiles_self_update ON profiles FOR UPDATE TO authenticated USING (id=(select auth.uid())) WITH CHECK (id=(select auth.uid()));
 
 DROP POLICY IF EXISTS site_members_select ON site_members;
 CREATE POLICY site_members_select ON site_members FOR SELECT TO authenticated
-USING (EXISTS (
-  SELECT 1 FROM sites s
-  WHERE s.id=site_members.site_id
-  AND EXISTS (
-    SELECT 1 FROM site_members me
-    WHERE me.site_id=s.id AND me.user_id=(select auth.uid())
-  )
-));
+USING (EXISTS (SELECT 1 FROM site_members me WHERE me.site_id=site_members.site_id AND me.user_id=(select auth.uid())));
 
 DROP POLICY IF EXISTS site_members_owner_manage ON site_members;
 CREATE POLICY site_members_owner_manage ON site_members FOR ALL TO authenticated
-USING (EXISTS (
-  SELECT 1 FROM site_members me
-  WHERE me.site_id=site_members.site_id
-  AND me.user_id=(select auth.uid())
-  AND me.role='owner'
-))
-WITH CHECK (EXISTS (
-  SELECT 1 FROM site_members me
-  WHERE me.site_id=site_members.site_id
-  AND me.user_id=(select auth.uid())
-  AND me.role='owner'
-));
+USING (EXISTS (SELECT 1 FROM site_members me WHERE me.site_id=site_members.site_id AND me.user_id=(select auth.uid()) AND me.role='owner'))
+WITH CHECK (EXISTS (SELECT 1 FROM site_members me WHERE me.site_id=site_members.site_id AND me.user_id=(select auth.uid()) AND me.role='owner'));
 
 CREATE OR REPLACE FUNCTION create_profile_for_user()
-RETURNS TRIGGER
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path=public
-AS $$
+RETURNS TRIGGER LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $$
 BEGIN
   INSERT INTO profiles(id,full_name,is_email_verified)
-  VALUES (
-    NEW.id,
-    COALESCE(NEW.raw_user_meta_data->>'full_name', NEW.raw_user_meta_data->>'name'),
-    COALESCE(NEW.email_confirmed_at IS NOT NULL,FALSE)
-  )
+  VALUES (NEW.id,COALESCE(NEW.raw_user_meta_data->>'full_name',NEW.raw_user_meta_data->>'name'),NEW.email_confirmed_at IS NOT NULL)
   ON CONFLICT (id) DO UPDATE SET
     full_name=COALESCE(EXCLUDED.full_name,profiles.full_name),
     is_email_verified=EXCLUDED.is_email_verified,
@@ -89,7 +60,26 @@ BEGIN
 END;
 $$;
 
-DROP TRIGGER IF EXISTS on_auth_user_created_haspaD ON auth.users;
-CREATE TRIGGER on_auth_user_created_haspad
-AFTER INSERT ON auth.users
+DROP TRIGGER IF EXISTS on_auth_user_created_haspad ON auth.users;
+CREATE TRIGGER on_auth_user_created_haspad AFTER INSERT ON auth.users
 FOR EACH ROW EXECUTE FUNCTION create_profile_for_user();
+
+CREATE OR REPLACE FUNCTION consume_auth_rate_limit(p_key TEXT,p_max INTEGER,p_window_seconds INTEGER)
+RETURNS BOOLEAN LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $$
+DECLARE r auth_rate_limits%ROWTYPE;
+BEGIN
+  SELECT * INTO r FROM auth_rate_limits WHERE key=p_key FOR UPDATE;
+  IF NOT FOUND THEN
+    INSERT INTO auth_rate_limits(key,window_started_at,attempts)
+    VALUES(p_key,now(),1);
+    RETURN TRUE;
+  END IF;
+  IF r.window_started_at + make_interval(secs=>p_window_seconds) <= now() THEN
+    UPDATE auth_rate_limits SET window_started_at=now(),attempts=1 WHERE key=p_key;
+    RETURN TRUE;
+  END IF;
+  IF r.attempts >= p_max THEN RETURN FALSE; END IF;
+  UPDATE auth_rate_limits SET attempts=attempts+1 WHERE key=p_key;
+  RETURN TRUE;
+END;
+$$;
