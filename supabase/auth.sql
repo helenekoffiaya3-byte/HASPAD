@@ -38,11 +38,8 @@ CREATE POLICY profiles_self_select ON profiles FOR SELECT TO authenticated USING
 DROP POLICY IF EXISTS profiles_self_update ON profiles;
 CREATE POLICY profiles_self_update ON profiles FOR UPDATE TO authenticated USING (id=(select auth.uid())) WITH CHECK (id=(select auth.uid()));
 
--- No recursive RLS predicates: a member may read only their own membership.
--- Server-side collaboration queries use the protected backend service client.
 DROP POLICY IF EXISTS site_members_self_select ON site_members;
-CREATE POLICY site_members_self_select ON site_members FOR SELECT TO authenticated
-USING (user_id=(select auth.uid()));
+CREATE POLICY site_members_self_select ON site_members FOR SELECT TO authenticated USING (user_id=(select auth.uid()));
 
 DROP POLICY IF EXISTS site_members_owner_manage ON site_members;
 CREATE POLICY site_members_owner_manage ON site_members FOR ALL TO authenticated
@@ -61,6 +58,8 @@ BEGIN
   RETURN NEW;
 END;
 $$;
+
+REVOKE ALL ON FUNCTION create_profile_for_user() FROM PUBLIC;
 
 DROP TRIGGER IF EXISTS on_auth_user_created_haspad ON auth.users;
 CREATE TRIGGER on_auth_user_created_haspad AFTER INSERT ON auth.users
