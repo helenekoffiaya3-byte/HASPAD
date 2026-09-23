@@ -1,0 +1,1 @@
+const status=document.querySelector("#status");document.querySelector("#newSite")?.addEventListener("click",()=>{status.textContent="Création de site: endpoint sécurisé à connecter.";});
