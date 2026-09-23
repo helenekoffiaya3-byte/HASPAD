@@ -1,0 +1,7 @@
+import {BlockNode,BlockNodeSchema} from "../types/ast";import {sanitizeCss} from "./sanitizer";
+const esc=(v:unknown)=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]!));
+const tags:Record<BlockNode["type"],string>={section:"section",container:"div",heading:"h2",text:"p",image:"img",button:"button",link:"a",grid:"div",flex:"div",video:"video",form:"form",input:"input",textarea:"textarea",spacer:"div",divider:"hr",payment_button:"button"};
+const voidTags=new Set(["img","input","hr"]);
+const css=(s?:Record<string,string>)=>s?Object.entries(s).map(([k,v])=>`${k}:${sanitizeCss(v)}`).join(";"):"";
+export function compileBlock(input:unknown){const b=BlockNodeSchema.parse(input),t=tags[b.type],a=[`data-block-id="${esc(b.id)}"`],style=css(b.styles?.desktop);if(style)a.push(`style="${esc(style)}"`);if(b.type==="image")a.push(`src="${esc(b.props.src)}"`,`alt="${esc(b.props.alt)}"`);if(b.type==="link")a.push(`href="${esc(b.props.url)}"`);if(b.type==="input")a.push(`name="${esc(b.props.name)}"`,`type="${esc(b.props.inputType||"text")}"`);if(b.type==="video")a.push("controls",`src="${esc(b.props.src)}"`);const body=["image","input","video","spacer","divider"].includes(b.type)?"":esc(b.props.text??b.props.label??""),children=(b.children??[]).map(compileBlock).join("");return voidTags.has(t)?`<${t} ${a.join(" ")}>`:`<${t} ${a.join(" ")}>${body}${children}</${t}>`;}
+export function compilePage(root:unknown){return compileBlock(root);}
