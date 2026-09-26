@@ -7,7 +7,7 @@ export default async req => {
   const id = url.searchParams.get("id");
   const projectId = url.searchParams.get("project_id");
   if (req.method === "GET") {
-    let query = client.from("deployments").select("id,project_id,status,current_step,branch_name,commit_sha,pull_request_url,logs,error,created_at,updated_at").eq("user_id", user.id).order("created_at", { ascending: false });
+    let query = client.from("deployments").select("id,project_id,status,current_step,branch_name,commit_sha,pull_request_url,netlify_site_id,netlify_deploy_id,logs,error,created_at,updated_at").eq("user_id", user.id).order("created_at", { ascending: false });
     if (id) query = query.eq("id", id).single();
     else if (projectId) query = query.eq("project_id", projectId).limit(1);
     const result = await query;
