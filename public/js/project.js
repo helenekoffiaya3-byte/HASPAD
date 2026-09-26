@@ -15,7 +15,7 @@ function esc(value) {
 async function load() {
   if (isNew) {
     document.querySelector("#title").textContent = "Nouveau projet";
-    document.querySelector("#site").textContent = "Choisissez un dépôt : HASPАD créera son adresse, par exemple monprojet.haspad.com.";
+    document.querySelector("#site").textContent = "Choisissez un dépôt : HASPАD réserve son adresse et injecte automatiquement le kit .haspad/.";
     document.querySelector("#repo").textContent = "Connectez GitHub puis choisissez un dépôt.";
     return;
   }
@@ -78,11 +78,32 @@ async function deploy() {
   document.querySelector("#deploy").disabled = true;
   watch(data.deployment.id);
 }
+function formatLogs(logs, prUrl) {
+  return (logs || []).map(log => {
+    if (typeof log === "string") return log;
+    const time = log.timestamp ? new Date(log.timestamp).toLocaleTimeString() : "";
+    return "[" + [time, log.agent, log.target].filter(Boolean).join(" • ") + "] " + (log.message || "");
+  }).concat(prUrl ? ["GitHub • " + prUrl] : []).join("\n");
+}
 function render(status) {
-  const labels = { gemini_processing:"Gemini — Interface", claude_processing:"Claude — Fonctionnement", chatgpt_verifying:"ChatGPT — Inspection", chatgpt_correcting:"ChatGPT — Corrections", github_pushing:"GitHub — Branche / PR", netlify_provisioning:"Netlify — Création du site", testing:"Netlify — Build / vérification", completed:"Terminé" };
-  const order = ["gemini_processing","claude_processing","chatgpt_verifying","chatgpt_correcting","github_pushing","netlify_provisioning","testing","completed"];
+  const labels = {
+    starting:"Initialisation",
+    netlify_provisioning:"Infrastructure — préparation",
+    gemini_processing:"Gemini — Interface",
+    gemini_correcting:"Gemini — Correction",
+    claude_processing:"Claude — Fonctionnement",
+    claude_correcting:"Claude — Correction",
+    chatgpt_verifying:"ChatGPT — Audit",
+    chatgpt_correcting:"ChatGPT — Corrections",
+    github_pushing:"GitHub — Push validé",
+    testing:"Vérification du déploiement",
+    fallback:"Fallback — dernière version stable",
+    completed:"Terminé",
+    failed:"Échec"
+  };
+  const order = ["starting","netlify_provisioning","gemini_processing","claude_processing","chatgpt_verifying","chatgpt_correcting","github_pushing","testing","completed"];
   const current = order.indexOf(status);
-  document.querySelector("#steps").innerHTML = order.map((step, index) => "<div class='step " + (index <= current ? "done" : "") + "'><span class='dot'></span>" + labels[step] + "</div>").join("");
+  document.querySelector("#steps").innerHTML = order.map((step,index) => "<div class='step " + (index <= current ? "done" : "") + (step === status ? " active" : "") + "><span class='dot'></span>" + labels[step] + "</div>").join("");
   document.querySelector("#status").textContent = labels[status] || status;
 }
 async function loadDeployment() {
@@ -90,7 +111,7 @@ async function loadDeployment() {
   const data = await response.json();
   if (data.deployment) {
     render(data.deployment.status);
-    document.querySelector("#logs").textContent = (data.deployment.logs || []).join("\n");
+    document.querySelector("#logs").textContent = formatLogs(data.deployment.logs);
     if (!["completed","failed"].includes(data.deployment.status)) watch(data.deployment.id);
   }
 }
@@ -98,7 +119,7 @@ function subscribeRealtime(deploymentId) {
   sb.channel("deployment-" + deploymentId).on("postgres_changes", { event: "UPDATE", schema: "public", table: "deployments", filter: "id=eq." + deploymentId }, payload => {
     const deployment = payload.new;
     render(deployment.status);
-    document.querySelector("#logs").textContent = (deployment.logs || []).join("\n") + (deployment.pull_request_url ? "\nPR: " + deployment.pull_request_url : "");
+    document.querySelector("#logs").textContent = formatLogs(deployment.logs, deployment.pull_request_url);
   }).subscribe();
 }
 function watch(deploymentId) {
@@ -108,7 +129,7 @@ function watch(deploymentId) {
     const data = await response.json();
     if (!data.deployment) return;
     render(data.deployment.status);
-    document.querySelector("#logs").textContent = (data.deployment.logs || []).join("\n") + (data.deployment.pull_request_url ? "\nPR: " + data.deployment.pull_request_url : "");
+    document.querySelector("#logs").textContent = formatLogs(data.deployment.logs, data.deployment.pull_request_url);
     if (["completed","failed"].includes(data.deployment.status)) {
       clearInterval(timer);
       document.querySelector("#deploy").disabled = false;
