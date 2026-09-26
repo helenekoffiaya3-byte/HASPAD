@@ -61,6 +61,7 @@ alter table public.ai_activity_logs enable row level security;
 alter table public.control_schema_requests enable row level security;
 
 create schema if not exists private;
+drop function if exists public.has_site_access(uuid);
 create or replace function private.has_site_access(p_site_id uuid)
 returns boolean language sql stable security definer set search_path=''
 as $$ select exists(select 1 from public.sites where id=p_site_id and user_id=(select auth.uid())); $$;
