@@ -107,7 +107,16 @@ async function loadDeployment() {
     if (!["completed","failed"].includes(data.deployment.status)) watch(data.deployment.id);
   }
 }
-function watch(deploymentId) {
+function subscribeRealtime(deploymentId) {
+  sb.channel("deployment-" + deploymentId)
+    .on("postgres_changes", { event: "UPDATE", schema: "public", table: "deployments", filter: "id=eq." + deploymentId }, payload => {
+      const deployment = payload.new;
+      render(deployment.status);
+      document.querySelector("#logs").textContent = (deployment.logs || []).join("\n") + (deployment.pull_request_url ? "\nPR: " + deployment.pull_request_url : "");
+    })
+    .subscribe();
+}
+function watch(deploymentId) {\n  subscribeRealtime(deploymentId);
   const timer = setInterval(async () => {
     const response = await api("/api/deployments?id=" + encodeURIComponent(deploymentId));
     const data = await response.json();
