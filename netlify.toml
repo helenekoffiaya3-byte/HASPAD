@@ -2,46 +2,12 @@
   publish = "public"
   functions = "netlify/functions"
 
-[[redirects]]
-  from = "/api/auth/register"
-  to = "/.netlify/functions/auth-register"
-  status = 200
-[[redirects]]
-  from = "/api/auth/login"
-  to = "/.netlify/functions/auth-login"
-  status = 200
-[[redirects]]
-  from = "/api/auth/refresh"
-  to = "/.netlify/functions/auth-refresh"
-  status = 200
-[[redirects]]
-  from = "/api/auth/logout"
-  to = "/.netlify/functions/auth-logout"
-  status = 200
-[[redirects]]
-  from = "/api/auth/me"
-  to = "/.netlify/functions/auth-me"
-  status = 200
-[[redirects]]
-  from = "/api/auth/forgot-password"
-  to = "/.netlify/functions/auth-forgot-password"
-  status = 200
-[[redirects]]
-  from = "/api/auth/resend-verification"
-  to = "/.netlify/functions/auth-resend-verification"
-  status = 200
-[[redirects]]
-  from = "/api/auth/config"
-  to = "/.netlify/functions/auth-config"
-  status = 200
-[[redirects]]
-  from = "/api/auth/oauth"
-  to = "/.netlify/functions/auth-oauth"
-  status = 200
-[[redirects]]
-  from = "/api/auth/oauth-callback"
-  to = "/.netlify/functions/auth-oauth-callback"
-  status = 200
+[functions]
+  node_bundler = "esbuild"
+
+[functions.deploy-background]
+  background = true
+
 [[redirects]]
   from = "/api/*"
   to = "/.netlify/functions/:splat"
@@ -53,3 +19,4 @@
     X-Frame-Options = "DENY"
     X-Content-Type-Options = "nosniff"
     Referrer-Policy = "strict-origin-when-cross-origin"
+    Permissions-Policy = "camera=(), microphone=(), geolocation=()"
