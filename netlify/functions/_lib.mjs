@@ -113,7 +113,7 @@ export function parseJson(text) {
   throw new Error("AI response is not valid JSON");
 }
 
-const unsafePath = /(^|\/)(\.git|node_modules)(\/|$)|^\.env|(^|\/) .*\.(lock|pem|key)$/i;
+const unsafePath = /(^|\/)(\.git|node_modules)(\/|$)|^\.env|(^|\/).*\.(lock|pem|key)$/i;
 
 export function validateFiles(result, knownPaths) {
   if (!result || !Array.isArray(result.files)) throw new Error("AI did not return files");
