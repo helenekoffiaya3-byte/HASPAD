@@ -90,7 +90,7 @@ async function provisionNetlify(project) {
   if (!hookUrl) {
     const hook = await netlifyApi("/sites/" + encodeURIComponent(site.id) + "/build_hooks", {
       method: "POST",
-      body: JSON.stringify({ title: "HASPАD AI fallback", branch: project.deploy_branch })
+      body: JSON.stringify({ title: "HASPАD AI fallback", branch: project.default_branch })
     });
     hookUrl = hook.url;
   }
@@ -142,7 +142,7 @@ async function pushValidatedFiles(project, token, files) {
 
 async function fallbackNetlify(project) {
   if (!project.netlify_build_hook_url) return false;
-  const response = await fetch(project.netlify_build_hook_url, { method: "POST" });
+  const hook = new URL(project.netlify_build_hook_url);\n  hook.searchParams.set("trigger_branch", project.deploy_branch || "haspad/deploy");\n  hook.searchParams.set("trigger_title", "HASPАD fallback — dernière version stable");\n  const response = await fetch(hook, { method: "POST" });
   return response.ok;
 }
 
