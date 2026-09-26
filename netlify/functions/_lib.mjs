@@ -15,7 +15,7 @@ export const requireEnv = (...names) => {
 
 export async function userFromRequest(req) {
   const header = req.headers.get("authorization") || "";
-  const token = header.replace(/^Bearer\\s+/i, "").trim();
+  const token = header.replace(/^Bearer\s+/i, "").trim();
   if (!token) return null;
   const result = await db().auth.getUser(token);
   return result.error ? null : result.data.user;
@@ -105,7 +105,7 @@ export async function logDeployment(id, patch, message) {
 }
 
 export function parseJson(text) {
-  const value = String(text || "").trim().replace(/^\`\`\`(?:json)?\\s*/i, "").replace(/\\s*\`\`\`$/, "");
+  const value = String(text || "").trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
   try { return JSON.parse(value); } catch {}
   const start = value.indexOf("{");
   const end = value.lastIndexOf("}");
@@ -113,7 +113,7 @@ export function parseJson(text) {
   throw new Error("AI response is not valid JSON");
 }
 
-const unsafePath = /(^|\/)(\.git|node_modules)(\/|$)|^\.env|(^|\/).*\\.(lock|pem|key)$/i;
+const unsafePath = /(^|\/)(\.git|node_modules)(\/|$)|^\.env|(^|\/) .*\.(lock|pem|key)$/i;
 
 export function validateFiles(result, knownPaths) {
   if (!result || !Array.isArray(result.files)) throw new Error("AI did not return files");
