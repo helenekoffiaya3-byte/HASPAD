@@ -7,7 +7,7 @@ export default async(req)=>{
  let body;try{body=JSON.parse(req.body||"{}")}catch{return json(400,{error:"JSON invalide."})}
  const plan=getPlan(body.planType);if(!plan)return json(400,{error:"Plan indisponible. Configurez son montant côté serveur."});
  if(!process.env.CINETPAY_API_KEY||!process.env.CINETPAY_SITE_ID)return json(503,{error:"CinetPay n'est pas encore configuré."});
- const txId=transactionId(),appUrl=process.env.PUBLIC_SITE_URL||"https://haspad.com",notifyUrl=process.env.CINETPAY_NOTIFY_URL||"https://haspad.com/api/cinetpay-notify";
+ const txId=transactionId(),appUrl=process.env.PUBLIC_SITE_URL||"https://haspad.com",notifyUrl=process.env.CINETPAY_NOTIFY_URL||"https://api.haspad.com/cinetpay-notify";
  const {data:profile}=await admin.from("profiles").select("full_name").eq("id",user.id).maybeSingle();
  const parts=String(profile?.full_name||"Client HASPAD").trim().split(/\s+/),customerName=parts.shift()||"Client",customerSurname=parts.join(" ")||"HASPAD";
  const payload={apikey:process.env.CINETPAY_API_KEY,site_id:process.env.CINETPAY_SITE_ID,transaction_id:txId,amount:plan.amount,currency:process.env.CINETPAY_CURRENCY||"XOF",description:"HASPAD "+plan.name+" "+plan.credits+" crédits",notify_url:notifyUrl,return_url:appUrl+"/paiement-retour.html?transaction_id="+encodeURIComponent(txId),channels:"ALL",lang:"FR",metadata:JSON.stringify({user_id:user.id,plan_type:plan.type}),customer_name:customerName,customer_surname:customerSurname,customer_email:user.email};
