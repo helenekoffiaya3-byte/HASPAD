@@ -1,1 +1,2 @@
-export default async()=>({statusCode:200,headers:{"content-type":"application/json"},body:JSON.stringify({ok:true,service:"HASPАD"})});
+import { json } from "./_lib.mjs";
+export default async () => json({ ok: true, service: "haspad", time: new Date().toISOString() });
