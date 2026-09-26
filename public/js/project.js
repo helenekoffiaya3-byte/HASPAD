@@ -79,8 +79,8 @@ async function deploy() {
   watch(data.deployment.id);
 }
 function render(status) {
-  const labels = { gemini_processing:"Gemini — Interface", claude_processing:"Claude — Fonctionnement", chatgpt_verifying:"ChatGPT — Inspection", chatgpt_correcting:"ChatGPT — Corrections", github_pushing:"GitHub — Branche / PR", testing:"Tests / CI", completed:"Terminé" };
-  const order = ["gemini_processing","claude_processing","chatgpt_verifying","chatgpt_correcting","github_pushing","testing","completed"];
+  const labels = { gemini_processing:"Gemini — Interface", claude_processing:"Claude — Fonctionnement", chatgpt_verifying:"ChatGPT — Inspection", chatgpt_correcting:"ChatGPT — Corrections", github_pushing:"GitHub — Branche / PR", netlify_provisioning:"Netlify — Création du site", testing:"Netlify — Build / vérification", completed:"Terminé" };
+  const order = ["gemini_processing","claude_processing","chatgpt_verifying","chatgpt_correcting","github_pushing","netlify_provisioning","testing","completed"];
   const current = order.indexOf(status);
   document.querySelector("#steps").innerHTML = order.map((step, index) => "<div class='step " + (index <= current ? "done" : "") + "'><span class='dot'></span>" + labels[step] + "</div>").join("");
   document.querySelector("#status").textContent = labels[status] || status;
