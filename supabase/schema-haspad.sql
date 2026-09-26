@@ -18,6 +18,7 @@ create table if not exists public.projects (
 alter table public.projects add column if not exists site_slug text;
 alter table public.projects add column if not exists site_url text;
 alter table public.projects add column if not exists netlify_site_id text;
+create unique index if not exists projects_site_slug_unique on public.projects(site_slug) where site_slug is not null;
 
 create table if not exists public.github_connections (
   id uuid primary key default gen_random_uuid(),
@@ -51,6 +52,8 @@ create table if not exists public.deployments (
 
 alter table public.deployments add column if not exists netlify_site_id text;
 alter table public.deployments add column if not exists netlify_deploy_id text;
+alter table public.deployments drop constraint if exists deployments_status_check;
+alter table public.deployments add constraint deployments_status_check check (status in ('starting','gemini_processing','claude_processing','chatgpt_verifying','chatgpt_correcting','github_pushing','netlify_provisioning','testing','completed','failed'));
 
 alter table public.projects enable row level security;
 alter table public.github_connections enable row level security;
