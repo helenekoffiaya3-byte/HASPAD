@@ -60,14 +60,16 @@ alter table public.ai_recommendations enable row level security;
 alter table public.ai_activity_logs enable row level security;
 alter table public.control_schema_requests enable row level security;
 
-create or replace function public.has_site_access(p_site_id uuid)
+create schema if not exists private;
+create or replace function private.has_site_access(p_site_id uuid)
 returns boolean language sql stable security definer set search_path=''
 as $$ select exists(select 1 from public.sites where id=p_site_id and user_id=(select auth.uid())); $$;
-revoke all on function public.has_site_access(uuid) from public,anon;
-grant execute on function public.has_site_access(uuid) to authenticated;
+revoke all on function private.has_site_access(uuid) from public,anon,authenticated;
+grant usage on schema private to authenticated;
+grant execute on function private.has_site_access(uuid) to authenticated;
 
 drop policy if exists control_centers_select on public.control_centers;
-create policy control_centers_select on public.control_centers for select to authenticated using (public.has_site_access(site_id));
+create policy control_centers_select on public.control_centers for select to authenticated using (private.has_site_access(site_id));
 drop policy if exists server_metrics_select on public.server_metrics;
 create policy server_metrics_select on public.server_metrics for select to authenticated using (public.has_site_access(site_id));
 drop policy if exists error_logs_select on public.error_logs;
@@ -82,3 +84,10 @@ drop policy if exists ai_activity_logs_select on public.ai_activity_logs;
 create policy ai_activity_logs_select on public.ai_activity_logs for select to authenticated using (public.has_site_access(site_id));
 drop policy if exists control_schema_requests_select on public.control_schema_requests;
 create policy control_schema_requests_select on public.control_schema_requests for select to authenticated using (public.has_site_access(site_id));
+
+create index if not exists control_centers_owner_user_idx on public.control_centers(owner_user_id);
+create index if not exists control_schema_requests_site_idx on public.control_schema_requests(site_id);
+create index if not exists control_schema_requests_user_idx on public.control_schema_requests(user_id);
+create index if not exists site_components_page_idx on public.site_components(page_id);
+create index if not exists subscriptions_user_idx on public.subscriptions(user_id);
+create index if not exists payment_transactions_user_idx on public.payment_transactions(user_id);
