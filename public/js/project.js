@@ -101,7 +101,7 @@ function render(status) {
     completed:"Terminé",
     failed:"Échec"
   };
-  const order = ["starting","netlify_provisioning","gemini_processing","claude_processing","chatgpt_verifying","chatgpt_correcting","github_pushing","testing","completed"];
+  const order = ["starting","netlify_provisioning","gemini_processing","claude_processing","chatgpt_verifying","chatgpt_correcting","github_pushing","testing","fallback","completed"];
   const current = order.indexOf(status);
   document.querySelector("#steps").innerHTML = order.map((step,index) => "<div class='step " + (index <= current ? "done" : "") + (step === status ? " active" : "") + "><span class='dot'></span>" + labels[step] + "</div>").join("");
   document.querySelector("#status").textContent = labels[status] || status;
@@ -112,7 +112,7 @@ async function loadDeployment() {
   if (data.deployment) {
     render(data.deployment.status);
     document.querySelector("#logs").textContent = formatLogs(data.deployment.logs);
-    if (!["completed","failed"].includes(data.deployment.status)) watch(data.deployment.id);
+    if (!["completed","failed","fallback"].includes(data.deployment.status)) watch(data.deployment.id);
   }
 }
 function subscribeRealtime(deploymentId) {
@@ -130,7 +130,7 @@ function watch(deploymentId) {
     if (!data.deployment) return;
     render(data.deployment.status);
     document.querySelector("#logs").textContent = formatLogs(data.deployment.logs, data.deployment.pull_request_url);
-    if (["completed","failed"].includes(data.deployment.status)) {
+    if (["completed","failed","fallback"].includes(data.deployment.status)) {
       clearInterval(timer);
       document.querySelector("#deploy").disabled = false;
     }
