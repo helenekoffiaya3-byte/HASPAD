@@ -1,6 +1,7 @@
 import {
   json, db, requireEnv, logDeployment, githubConnection, decryptToken, snapshot,
-  context, gemini, claude, openai, parseJson, validateFiles, github
+  context, gemini, claude, openai, parseJson, validateFiles, github, netlifyApi,
+  waitForNetlifyDeploy
 } from "./_lib.mjs";
 
 export const config = { background: true };
@@ -80,13 +81,6 @@ export default async req => {
       body: JSON.stringify({ sha: commit.sha, force: false })
     });
 
-    await logDeployment(dep.id, {
-      status: "testing",
-      current_step: "Tests / CI",
-      branch_name: branchName,
-      commit_sha: commit.sha
-    }, "Commit " + commit.sha.slice(0, 8) + " créé.");
-
     const pr = await github("/repos/" + project.repo_owner + "/" + project.repo_name + "/pulls", token, {
       method: "POST",
       body: JSON.stringify({
@@ -99,10 +93,47 @@ export default async req => {
     });
 
     await logDeployment(dep.id, {
-      status: "completed",
-      current_step: "Terminé",
+      status: "netlify_provisioning",
+      current_step: "Netlify — Création du site",
+      branch_name: branchName,
+      commit_sha: commit.sha,
       pull_request_url: pr.html_url
-    }, "Pull Request créée: " + pr.html_url);
+    }, "Pull Request créée. Création du site Netlify.");
+
+    const domain = String(project.site_url || "").replace(/^https?:\/\//, "").replace(/\/$/, "");
+    const site = await netlifyApi("/sites", {
+      method: "POST",
+      body: JSON.stringify({
+        name: project.site_slug,
+        custom_domain: domain,
+        force_ssl: true,
+        repo: {
+          provider: "github",
+          repo_path: project.repo_owner + "/" + project.repo_name,
+          repo_branch: branchName,
+          dir: "/",
+          cmd: ""
+        }
+      })
+    });
+
+    await client.from("projects").update({ netlify_site_id: site.id }).eq("id", project.id);
+    await logDeployment(dep.id, {
+      status: "testing",
+      current_step: "Netlify — Build / vérification",
+      netlify_site_id: site.id,
+      netlify_deploy_id: site.published_deploy?.id || null
+    }, "Site Netlify créé: " + (site.ssl_url || site.url || project.site_url));
+
+    const deployed = await waitForNetlifyDeploy(site.id);
+    if (deployed.deploy?.id) {
+      await client.from("deployments").update({ netlify_deploy_id: deployed.deploy.id }).eq("id", dep.id);
+    }
+    if (deployed.timedOut) {
+      await logDeployment(dep.id, { status: "completed", current_step: "Netlify — Build en cours" }, "Le site a été créé. Netlify poursuit le build.");
+    } else {
+      await logDeployment(dep.id, { status: "completed", current_step: "Terminé" }, "Site Netlify prêt: " + (deployed.site?.ssl_url || deployed.site?.url || project.site_url));
+    }
   } catch (error) {
     try {
       await logDeployment(deploymentId, { status: "failed", current_step: "Erreur", error: error.message }, error.message);
