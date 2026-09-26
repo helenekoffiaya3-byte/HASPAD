@@ -101,7 +101,7 @@ export default async req => {
   const id = url.searchParams.get("id");
 
   if (req.method === "GET") {
-    let query = client.from("projects").select("id,name,site_slug,site_url,netlify_site_id,netlify_build_hook_url,deploy_branch,repo_owner,repo_name,repo_url,default_branch,created_at,updated_at").eq("user_id", user.id).order("created_at", { ascending: false });
+    let query = client.from("projects").select("id,name,site_slug,site_url,netlify_site_id,deploy_branch,repo_owner,repo_name,repo_url,default_branch,created_at,updated_at").eq("user_id", user.id).order("created_at", { ascending: false });
     if (id) query = query.eq("id", id).single();
     const result = await query;
     if (result.error) return json({ error: result.error.message }, id ? 404 : 500);
