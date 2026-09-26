@@ -51,3 +51,22 @@ Les tables de crédits et de paiement ont RLS. Les fonctions privilégiées sont
 Le dépôt ne peut pas, à lui seul, créer le certificat DNS de `haspad.com`. Dans Netlify, le domaine personnalisé doit être rattaché au site `haspad-ai`, puis le DNS doit pointer vers Netlify. Le sous-domaine `api.haspad.com` doit également être configuré vers l'infrastructure qui exécute les fonctions API.
 
 Une fois le DNS actif, aucune URL `netlify.app` ne doit être utilisée comme URL publique par l'application.
+
+
+## Offre Startup
+
+- 4 000 crédits.
+- Montant XOF configuré exclusivement par `CINETPAY_STARTUP_AMOUNT_XOF`.
+- Centre de contrôle logique isolé par projet.
+- Métriques serveur, erreurs, pages, composants, recommandations et journal des agents.
+- Agent Gemini 3.8 Flash configurable par `GEMINI_MODEL`.
+- L'agent reçoit une demande et retourne un **blueprint JSON validé**, jamais du SQL arbitraire exécutable. Cela limite les risques d'injection DDL et maintient le périmètre du centre de contrôle.
+- GitHub, GitLab et Bitbucket restent des intégrations distinctes; leurs secrets ne sont jamais exposés au navigateur.
+
+### Sécurité des crédits
+
+Le débit utilise un verrou PostgreSQL `FOR UPDATE` dans une fonction `SECURITY DEFINER` avec `search_path = ''`. Les remboursements sont idempotents grâce à la référence unique de transaction. Le navigateur ne fournit jamais le `user_id` de facturation: le serveur le déduit du JWT Supabase.
+
+### Centre de contrôle
+
+Appliquer `supabase/control_center.sql` après le schéma principal. RLS est activé sur les tables exposées et l'accès est limité aux membres du projet. Supabase recommande RLS sur les tables exposées et un contrôle précis des grants; les fonctions privilégiées doivent être protégées. 
