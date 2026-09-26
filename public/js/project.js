@@ -3,19 +3,19 @@ const params = new URLSearchParams(location.search);
 const id = params.get("id");
 const isNew = params.get("new") === "1";
 let project = null;
+
 async function api(path, options = {}) {
   const result = await sb.auth.getSession();
   const token = result.data.session?.access_token;
   return fetch(path, { ...options, headers: { ...(options.headers || {}), authorization: "Bearer " + token } });
 }
 function esc(value) {
-  return String(value ?? "").replace(/[&<>"']/g, char => ({
-    "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
-  }[char]));
+  return String(value ?? "").replace(/[&<>"']/g, char => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[char]));
 }
 async function load() {
   if (isNew) {
     document.querySelector("#title").textContent = "Nouveau projet";
+    document.querySelector("#site").textContent = "Choisissez un dépôt : HASPАD créera son adresse, par exemple monprojet.haspad.com.";
     document.querySelector("#repo").textContent = "Connectez GitHub puis choisissez un dépôt.";
     return;
   }
@@ -24,6 +24,8 @@ async function load() {
   if (!response.ok) return alert(data.error || "Projet introuvable");
   project = data.project;
   document.querySelector("#title").textContent = project.name;
+  const site = document.querySelector("#site");
+  site.innerHTML = '<a href="' + esc(project.site_url) + '" target="_blank" rel="noopener">' + esc(project.site_url) + '</a>';
   document.querySelector("#repo").textContent = project.repo_owner + "/" + project.repo_name;
   document.querySelector("#deploy").disabled = false;
   loadDeployment();
@@ -58,15 +60,10 @@ async function saveRepo() {
   const response = await api("/api/projects", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      name: parts[1],
-      repo_owner: parts[0],
-      repo_name: parts[1],
-      default_branch: option.dataset.branch || "main"
-    })
+    body: JSON.stringify({ name: parts[1], repo_owner: parts[0], repo_name: parts[1], default_branch: option.dataset.branch || "main" })
   });
   const data = await response.json();
-  if (!response.ok) return alert(data.error || "Association impossible");
+  if (!response.ok) return alert(data.error || "Création du site impossible");
   location.href = "/project.html?id=" + encodeURIComponent(data.project.id);
 }
 async function deploy() {
@@ -82,20 +79,10 @@ async function deploy() {
   watch(data.deployment.id);
 }
 function render(status) {
-  const labels = {
-    gemini_processing:"Gemini — Interface",
-    claude_processing:"Claude — Fonctionnement",
-    chatgpt_verifying:"ChatGPT — Inspection",
-    chatgpt_correcting:"ChatGPT — Corrections",
-    github_pushing:"GitHub — Branche / PR",
-    testing:"Tests / CI",
-    completed:"Terminé"
-  };
+  const labels = { gemini_processing:"Gemini — Interface", claude_processing:"Claude — Fonctionnement", chatgpt_verifying:"ChatGPT — Inspection", chatgpt_correcting:"ChatGPT — Corrections", github_pushing:"GitHub — Branche / PR", testing:"Tests / CI", completed:"Terminé" };
   const order = ["gemini_processing","claude_processing","chatgpt_verifying","chatgpt_correcting","github_pushing","testing","completed"];
   const current = order.indexOf(status);
-  document.querySelector("#steps").innerHTML = order.map((step, index) =>
-    "<div class='step " + (index <= current ? "done" : "") + "'><span class='dot'></span>" + labels[step] + "</div>"
-  ).join("");
+  document.querySelector("#steps").innerHTML = order.map((step, index) => "<div class='step " + (index <= current ? "done" : "") + "'><span class='dot'></span>" + labels[step] + "</div>").join("");
   document.querySelector("#status").textContent = labels[status] || status;
 }
 async function loadDeployment() {
@@ -108,15 +95,14 @@ async function loadDeployment() {
   }
 }
 function subscribeRealtime(deploymentId) {
-  sb.channel("deployment-" + deploymentId)
-    .on("postgres_changes", { event: "UPDATE", schema: "public", table: "deployments", filter: "id=eq." + deploymentId }, payload => {
-      const deployment = payload.new;
-      render(deployment.status);
-      document.querySelector("#logs").textContent = (deployment.logs || []).join("\n") + (deployment.pull_request_url ? "\nPR: " + deployment.pull_request_url : "");
-    })
-    .subscribe();
+  sb.channel("deployment-" + deploymentId).on("postgres_changes", { event: "UPDATE", schema: "public", table: "deployments", filter: "id=eq." + deploymentId }, payload => {
+    const deployment = payload.new;
+    render(deployment.status);
+    document.querySelector("#logs").textContent = (deployment.logs || []).join("\n") + (deployment.pull_request_url ? "\nPR: " + deployment.pull_request_url : "");
+  }).subscribe();
 }
-function watch(deploymentId) {\n  subscribeRealtime(deploymentId);
+function watch(deploymentId) {
+  subscribeRealtime(deploymentId);
   const timer = setInterval(async () => {
     const response = await api("/api/deployments?id=" + encodeURIComponent(deploymentId));
     const data = await response.json();
