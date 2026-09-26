@@ -2,13 +2,16 @@ create table if not exists public.projects (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
   name text not null check (char_length(trim(name)) between 1 and 120),
+  site_slug text not null check (site_slug ~ '^[a-z0-9][a-z0-9-]*[a-z0-9]$'),
+  site_url text not null,
   repo_owner text not null check (repo_owner ~ '^[A-Za-z0-9_.-]+$'),
   repo_name text not null check (repo_name ~ '^[A-Za-z0-9_.-]+$'),
   repo_url text not null,
   default_branch text not null default 'main',
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
-  unique(user_id, repo_owner, repo_name)
+  unique(user_id, repo_owner, repo_name),
+  unique(site_slug)
 );
 
 create table if not exists public.github_connections (
