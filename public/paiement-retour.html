@@ -1,1 +1,59 @@
-<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Paiement — HASPAD.com</title><link rel="stylesheet" href="/css/dashboard.css"></head><body><main class="center"><section class="card"><div class="brand">HASPAD.com</div><h1>Paiement en cours de vérification</h1><p>Le statut définitif est confirmé par le serveur CinetPay. Cette page n'accorde aucun crédit directement.</p><a class="button" href="/dashboard.html">Retour au dashboard</a></section></main></body></html>
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Paiement — HASPAD.com</title>
+<link rel="stylesheet" href="/css/dashboard.css">
+<style>
+.status{font-size:1.05rem;line-height:1.5}.ok{font-weight:700}.muted{opacity:.75}
+</style>
+</head>
+<body>
+<main class="center"><section class="card">
+<div class="brand">HASPAD.com</div>
+<h1 id="title">Vérification du paiement</h1>
+<p id="status" class="status">Nous vérifions la transaction auprès de CinetPay…</p>
+<p id="detail" class="muted"></p>
+<a id="back" class="button" href="/dashboard.html">Retour au dashboard</a>
+</section></main>
+<script>
+const params=new URLSearchParams(location.search);
+const transactionId=params.get("transaction_id");
+const TOKEN_KEY="haspad:access_token";
+const token=()=>sessionStorage.getItem(TOKEN_KEY);
+const statusEl=document.getElementById("status");
+const detailEl=document.getElementById("detail");
+const titleEl=document.getElementById("title");
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+
+async function verify(){
+  const t=token();
+  if(!t){titleEl.textContent="Session requise";statusEl.textContent="Reconnectez-vous à HASPAD puis revenez sur cette page.";return {done:true};}
+  if(!transactionId){titleEl.textContent="Transaction introuvable";statusEl.textContent="Identifiant de transaction manquant.";return {done:true};}
+  const response=await fetch("/api/payment-verify",{method:"POST",headers:{"content-type":"application/json","authorization":"Bearer "+t},body:JSON.stringify({transactionId})});
+  let data={};try{data=await response.json()}catch{}
+  if(data.status==="accepted"&&data.success){
+    titleEl.textContent="Paiement confirmé";
+    statusEl.innerHTML='<span class="ok">Crédits ajoutés : '+Number(data.creditsAdded||0).toLocaleString("fr-FR")+'</span>';
+    detailEl.textContent="La transaction est enregistrée de façon idempotente. Vous pouvez continuer.";
+    return {done:true};
+  }
+  if(response.status===401){titleEl.textContent="Session expirée";statusEl.textContent="Reconnectez-vous puis vérifiez à nouveau le paiement.";return {done:true};}
+  statusEl.textContent="Paiement en attente de confirmation…";
+  detailEl.textContent="Nouvelle vérification automatique. La notification CinetPay peut encore être en cours.";
+  return {done:false};
+}
+
+(async()=>{
+  for(let i=0;i<10;i++){
+    try{const result=await verify();if(result.done)break;}catch(e){detailEl.textContent="Vérification temporairement indisponible. Nouvelle tentative…";}
+    if(i<9) await sleep(Math.min(3000+i*1000,10000));
+  }
+  if(!statusEl.textContent.includes("Crédits ajoutés")&&!statusEl.textContent.includes("Session")&&!statusEl.textContent.includes("Transaction")){
+    titleEl.textContent="Paiement en attente";
+    statusEl.textContent="Le paiement n’est pas encore confirmé par CinetPay.";
+    detailEl.textContent="Vous pouvez revenir au dashboard. Le webhook serveur finalisera automatiquement la transaction dès confirmation.";
+  }
+})();
+</script>
+</body></html>
