@@ -1,3 +1,23 @@
 <!doctype html>
-<html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>HASPАD</title><link rel="stylesheet" href="/css/style.css"></head>
-<body><main class="center"><section class="card hero"><div class="brand">HASPАD</div><p class="eyebrow">AI PROJECT DEPLOYMENT</p><h1>Construisez. Vérifiez. Déployez.</h1><p>Gemini construit l'interface, Claude le fonctionnement et ChatGPT contrôle le résultat.</p><button id="google" class="primary">Continuer avec Google</button><p id="message" class="muted"></p></section></main><script type="module" src="/js/auth.js"></script></body></html>
+<html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>HASPАD — Vitrine</title><link rel="stylesheet" href="/css/style.css"></head>
+<body>
+<main class="shell">
+<section class="hero card">
+<div class="brand">HASPАD</div>
+<p class="eyebrow">AI PROJECT DEPLOYMENT</p>
+<h1>Construisez. Vérifiez. Déployez.</h1>
+<p>Une interface simple pour connecter votre projet GitHub et laisser les agents IA préparer le déploiement.</p>
+<button id="google" class="primary">Continuer avec Google</button>
+<p id="message" class="muted"></p>
+</section>
+<section class="card" style="margin-top:20px">
+<p class="eyebrow">PROJET</p><h2>StreamLive</h2>
+<p class="muted">Connectez le dépôt GitHub de StreamLive, puis lancez Deploy.</p>
+<button id="streamlive" class="primary">Ouvrir StreamLive</button>
+</section>
+</main>
+<script type="module" src="/js/auth.js"></script>
+<script>
+document.querySelector("#streamlive").onclick=()=>location.href="/project.html?new=1&template=streamlive";
+</script>
+</body></html>
