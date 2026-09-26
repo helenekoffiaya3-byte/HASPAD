@@ -5,6 +5,8 @@ create table if not exists public.projects (
   site_slug text not null check (site_slug ~ '^[a-z0-9][a-z0-9-]*[a-z0-9]$'),
   site_url text not null,
   netlify_site_id text,
+  netlify_build_hook_url text,
+  deploy_branch text not null default 'haspad/deploy',
   repo_owner text not null check (repo_owner ~ '^[A-Za-z0-9_.-]+$'),
   repo_name text not null check (repo_name ~ '^[A-Za-z0-9_.-]+$'),
   repo_url text not null,
@@ -18,6 +20,8 @@ create table if not exists public.projects (
 alter table public.projects add column if not exists site_slug text;
 alter table public.projects add column if not exists site_url text;
 alter table public.projects add column if not exists netlify_site_id text;
+alter table public.projects add column if not exists netlify_build_hook_url text;
+alter table public.projects add column if not exists deploy_branch text not null default 'haspad/deploy';
 create unique index if not exists projects_site_slug_unique on public.projects(site_slug) where site_slug is not null;
 
 create table if not exists public.github_connections (
@@ -37,7 +41,7 @@ create table if not exists public.deployments (
   id uuid primary key default gen_random_uuid(),
   project_id uuid not null references public.projects(id) on delete cascade,
   user_id uuid not null references auth.users(id) on delete cascade,
-  status text not null default 'starting' check (status in ('starting','gemini_processing','claude_processing','chatgpt_verifying','chatgpt_correcting','github_pushing','netlify_provisioning','testing','completed','failed')),
+  status text not null default 'starting' check (status in ('starting','gemini_processing','gemini_correcting','claude_processing','claude_correcting','chatgpt_verifying','chatgpt_correcting','github_pushing','netlify_provisioning','testing','fallback','completed','failed')),
   current_step text,
   branch_name text,
   commit_sha text,
@@ -52,8 +56,10 @@ create table if not exists public.deployments (
 
 alter table public.deployments add column if not exists netlify_site_id text;
 alter table public.deployments add column if not exists netlify_deploy_id text;
+alter table public.deployments add column if not exists netlify_site_id text;
+alter table public.deployments add column if not exists netlify_deploy_id text;
 alter table public.deployments drop constraint if exists deployments_status_check;
-alter table public.deployments add constraint deployments_status_check check (status in ('starting','gemini_processing','claude_processing','chatgpt_verifying','chatgpt_correcting','github_pushing','netlify_provisioning','testing','completed','failed'));
+alter table public.deployments add constraint deployments_status_check check (status in ('starting','gemini_processing','gemini_correcting','claude_processing','claude_correcting','chatgpt_verifying','chatgpt_correcting','github_pushing','netlify_provisioning','testing','fallback','completed','failed'));
 
 alter table public.projects enable row level security;
 alter table public.github_connections enable row level security;
