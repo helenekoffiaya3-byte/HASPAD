@@ -1,15 +1,7 @@
 # HASPAD
 
-Backend d’authentification et de gestion des sites HASPAD.
+HASPАD orchestre un projet GitHub avec trois rôles IA: Gemini pour l'interface, Claude pour le fonctionnement et ChatGPT pour l'audit final.
 
-## Authentification
-- Inscription email/mot de passe avec bcrypt
-- Connexion email/mot de passe
-- Access JWT 15 minutes
-- Refresh JWT 7 jours dans cookie HttpOnly
-- Préparation SSO Google, GitHub, GitLab et Bitbucket
+Flux: Google Auth -> projet -> connexion GitHub -> Deploy -> Gemini -> Claude -> ChatGPT -> branche isolée -> Pull Request -> CI.
 
-## Configuration
-Copier `.env.example` vers `.env` et renseigner les secrets uniquement localement.
-
-Ne jamais committer `.env`, les mots de passe, les clés JWT ou les clés Supabase serveur.
+La branche principale n'est jamais modifiée directement par le pipeline IA. Les secrets restent dans les variables Netlify.
