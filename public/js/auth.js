@@ -1,8 +1,19 @@
-const TOKEN_KEY="haspad:access_token",REFRESH_KEY="haspad:refresh_token";
-export const getAccessToken=()=>sessionStorage.getItem(TOKEN_KEY);
-export const getUser=()=>{try{return JSON.parse(sessionStorage.getItem("haspad:user")||"null")}catch{return null}};
-export const setSession=s=>{if(s.accessToken)sessionStorage.setItem(TOKEN_KEY,s.accessToken);if(s.refreshToken)sessionStorage.setItem(REFRESH_KEY,s.refreshToken);if(s.user)sessionStorage.setItem("haspad:user",JSON.stringify(s.user));};
-export const clearSession=()=>{sessionStorage.removeItem(TOKEN_KEY);sessionStorage.removeItem(REFRESH_KEY);sessionStorage.removeItem("haspad:user");};
-export async function api(path,options={}){const h=new Headers(options.headers||{}),token=getAccessToken();if(options.body&&!h.has("content-type"))h.set("content-type","application/json");if(token)h.set("authorization",`Bearer ${token}`);let r=await fetch(path,{...options,headers:h});if(r.status===401&&path!=="/api/auth-refresh"){const refresh=sessionStorage.getItem(REFRESH_KEY);if(refresh){const rr=await fetch("/api/auth-refresh",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({refreshToken:refresh})});if(rr.ok){setSession(await rr.json());h.set("authorization",`Bearer ${getAccessToken()}`);r=await fetch(path,{...options,headers:h});}}}return r;}
-export async function refreshSession(){const refresh=sessionStorage.getItem(REFRESH_KEY);if(!refresh){clearSession();return false}const r=await fetch("/api/auth-refresh",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({refreshToken:refresh})});if(!r.ok){clearSession();return false}setSession(await r.json());return true;}
-export async function logout(){const token=getAccessToken();if(token)await fetch("/api/auth-logout",{method:"POST",headers:{authorization:`Bearer ${token}`}});clearSession();}
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.117.2";
+const config = await fetch("/api/config").then(r => r.json());
+export const sb = createClient(config.supabaseUrl, config.supabasePublishableKey);
+const sessionResult = await sb.auth.getSession();
+const session = sessionResult.data.session;
+const path = location.pathname;
+if (session && (path === "/" || path === "/index.html")) location.replace("/dashboard.html");
+if (!session && (path === "/dashboard.html" || path === "/project.html")) location.replace("/");
+document.querySelector("#google")?.addEventListener("click", async () => {
+  const result = await sb.auth.signInWithOAuth({
+    provider: "google",
+    options: { redirectTo: location.origin + "/dashboard.html" }
+  });
+  if (result.error) document.querySelector("#message").textContent = result.error.message;
+});
+document.querySelector("#logout")?.addEventListener("click", async () => {
+  await sb.auth.signOut();
+  location.replace("/");
+});
