@@ -101,21 +101,41 @@ export default async req => {
     }, "Pull Request créée. Création du site Netlify.");
 
     const domain = String(project.site_url || "").replace(/^https?:\/\//, "").replace(/\/$/, "");
-    const site = await netlifyApi("/sites", {
-      method: "POST",
-      body: JSON.stringify({
-        name: project.site_slug,
-        custom_domain: domain,
-        force_ssl: true,
-        repo: {
-          provider: "github",
-          repo_path: project.repo_owner + "/" + project.repo_name,
-          repo_branch: branchName,
-          dir: "/",
-          cmd: ""
-        }
-      })
-    });
+    let site = null;
+    if (project.netlify_site_id) {
+      site = await netlifyApi("/sites/" + encodeURIComponent(project.netlify_site_id), {
+        method: "PATCH",
+        body: JSON.stringify({
+          name: project.site_slug,
+          custom_domain: domain,
+          force_ssl: true,
+          repo: {
+            provider: "github",
+            repo_path: project.repo_owner + "/" + project.repo_name,
+            repo_branch: branchName
+          }
+        })
+      });
+    } else {
+      try {
+        site = await netlifyApi("/sites/" + encodeURIComponent(project.site_slug));
+      } catch {}
+      if (!site) {
+        site = await netlifyApi("/sites", {
+          method: "POST",
+          body: JSON.stringify({
+            name: project.site_slug,
+            custom_domain: domain,
+            force_ssl: true,
+            repo: {
+              provider: "github",
+              repo_path: project.repo_owner + "/" + project.repo_name,
+              repo_branch: branchName
+            }
+          })
+        });
+      }
+    }
 
     await client.from("projects").update({ netlify_site_id: site.id }).eq("id", project.id);
     await logDeployment(dep.id, {
