@@ -57,7 +57,7 @@ export default async (req) => {
     return json(409, { error: "Montant du paiement invalide." });
   }
 
-  const { error: creditError } = await admin.rpc("apply_payment_credits", {
+  const { error: markAcceptedError } = await admin.from("payment_transactions").update({\n    status: "accepted",\n    provider_response: result,\n    updated_at: new Date().toISOString()\n  }).eq("id", payment.id).eq("status", "pending");\n\n  if (markAcceptedError) {\n    console.error("HASPAD payment status update error:", markAcceptedError);\n    return json(503, { error: "Paiement validé, confirmation en cours." });\n  }\n\n  const { error: creditError } = await admin.rpc("apply_payment_credits", {
     p_payment_id: payment.id
   });
 
