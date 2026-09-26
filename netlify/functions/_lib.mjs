@@ -197,12 +197,36 @@ export async function snapshot(owner, repo, branch, token) {
 
 export const context = files => files.map(f => "\n===== " + f.path + " =====\n" + f.content).join("\n");
 
-export async function gemini(prompt) {
+export const FILES_JSON_SCHEMA = {
+  type: "object",
+  properties: {
+    files: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          path: { type: "string" },
+          action: { type: "string", enum: ["create", "update", "delete"] },
+          content: { type: "string" }
+        },
+        required: ["path", "action", "content"]
+      }
+    },
+    summary: { type: "string" }
+  },
+  required: ["files", "summary"]
+};
+
+export async function gemini(prompt, schema = FILES_JSON_SCHEMA) {
   requireEnv("GEMINI_API_KEY", "GEMINI_MODEL");
   const response = await fetch("https://generativelanguage.googleapis.com/v1beta/interactions", {
     method: "POST",
     headers: { "x-goog-api-key": process.env.GEMINI_API_KEY, "content-type": "application/json" },
-    body: JSON.stringify({ model: process.env.GEMINI_MODEL, input: prompt })
+    body: JSON.stringify({
+      model: process.env.GEMINI_MODEL,
+      input: prompt,
+      response_format: { type: "text", mime_type: "application/json", schema }
+    })
   });
   const data = await response.json();
   if (!response.ok) throw new Error("Gemini " + response.status + ": " + (data.error?.message || "request failed"));
