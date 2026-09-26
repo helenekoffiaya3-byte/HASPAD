@@ -1,7 +1,7 @@
 -- HASPAD Startup Control Center.
 create table if not exists public.control_centers (
   site_id uuid primary key references public.sites(id) on delete cascade,
-  owner_user_id uuid not null references auth.users(id) on delete cascade,
+  owner_user_id uuid not null references public.users(id) on delete cascade,
   plan text not null default 'startup' check(plan='startup'),
   provisioned_at timestamptz not null default now(),
   schema_version integer not null default 1
@@ -42,7 +42,7 @@ create table if not exists public.ai_activity_logs (
 );
 create table if not exists public.control_schema_requests (
   id uuid primary key default gen_random_uuid(), site_id uuid not null references public.sites(id) on delete cascade,
-  user_id uuid not null references auth.users(id) on delete cascade, request_text text not null,
+  user_id uuid not null references public.users(id) on delete cascade, request_text text not null,
   schema_blueprint jsonb not null, status text not null default 'applied' check(status in ('applied','rejected')),
   created_at timestamptz not null default now()
 );
@@ -62,7 +62,7 @@ alter table public.control_schema_requests enable row level security;
 
 create or replace function public.has_site_access(p_site_id uuid)
 returns boolean language sql stable security definer set search_path=''
-as $$ select exists(select 1 from public.site_members where site_id=p_site_id and user_id=(select auth.uid())); $$;
+as $$ select exists(select 1 from public.sites where id=p_site_id and user_id=(select auth.uid())); $$;
 revoke all on function public.has_site_access(uuid) from public,anon;
 grant execute on function public.has_site_access(uuid) to authenticated;
 
