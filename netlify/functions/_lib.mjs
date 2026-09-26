@@ -137,12 +137,13 @@ export async function logDeployment(id, patch, message) {
 }
 
 export function parseJson(text) {
-  const value = String(text || "").trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
-  try { return JSON.parse(value); } catch {}
-  const start = value.indexOf("{");
-  const end = value.lastIndexOf("}");
-  if (start >= 0 && end > start) return JSON.parse(value.slice(start, end + 1));
-  throw new Error("AI response is not valid JSON");
+  const value = String(text || "").trim();
+  if (!value) throw new Error("AI returned an empty response");
+  try {
+    return JSON.parse(value);
+  } catch (error) {
+    throw new Error("AI response is not valid JSON: " + error.message);
+  }
 }
 
 const unsafePath = /(^|\/)(\.git|node_modules)(\/|$)|^\.env|(^|\/).*\.(lock|pem|key)$/i;
