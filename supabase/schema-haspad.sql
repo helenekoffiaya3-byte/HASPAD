@@ -56,8 +56,6 @@ create table if not exists public.deployments (
 
 alter table public.deployments add column if not exists netlify_site_id text;
 alter table public.deployments add column if not exists netlify_deploy_id text;
-alter table public.deployments add column if not exists netlify_site_id text;
-alter table public.deployments add column if not exists netlify_deploy_id text;
 alter table public.deployments drop constraint if exists deployments_status_check;
 alter table public.deployments add constraint deployments_status_check check (status in ('starting','gemini_processing','gemini_correcting','claude_processing','claude_correcting','chatgpt_verifying','chatgpt_correcting','github_pushing','netlify_provisioning','testing','fallback','completed','failed'));
 
