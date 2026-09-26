@@ -254,12 +254,14 @@ export async function claude(system, prompt) {
   return (data.content || []).filter(x => x.type === "text").map(x => x.text).join("\n");
 }
 
-export async function openai(system, prompt) {
+export async function openai(system, prompt, schema = null) {
   requireEnv("OPENAI_API_KEY", "OPENAI_MODEL");
+  const requestBody = { model: process.env.OPENAI_MODEL, instructions: system, input: prompt, store: false };
+  if (schema) requestBody.text = { format: { type: "json_schema", name: "haspad_output", strict: true, schema } };
   const response = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
     headers: { authorization: "Bearer " + process.env.OPENAI_API_KEY, "content-type": "application/json" },
-    body: JSON.stringify({ model: process.env.OPENAI_MODEL, instructions: system, input: prompt, store: false })
+    body: JSON.stringify(requestBody)
   });
   const data = await response.json();
   if (!response.ok) throw new Error("OpenAI " + response.status + ": " + (data.error?.message || "request failed"));
