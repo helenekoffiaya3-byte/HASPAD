@@ -4,6 +4,7 @@ create table if not exists public.projects (
   name text not null check (char_length(trim(name)) between 1 and 120),
   site_slug text not null check (site_slug ~ '^[a-z0-9][a-z0-9-]*[a-z0-9]$'),
   site_url text not null,
+  netlify_site_id text,
   repo_owner text not null check (repo_owner ~ '^[A-Za-z0-9_.-]+$'),
   repo_name text not null check (repo_name ~ '^[A-Za-z0-9_.-]+$'),
   repo_url text not null,
@@ -13,6 +14,10 @@ create table if not exists public.projects (
   unique(user_id, repo_owner, repo_name),
   unique(site_slug)
 );
+
+alter table public.projects add column if not exists site_slug text;
+alter table public.projects add column if not exists site_url text;
+alter table public.projects add column if not exists netlify_site_id text;
 
 create table if not exists public.github_connections (
   id uuid primary key default gen_random_uuid(),
@@ -31,16 +36,21 @@ create table if not exists public.deployments (
   id uuid primary key default gen_random_uuid(),
   project_id uuid not null references public.projects(id) on delete cascade,
   user_id uuid not null references auth.users(id) on delete cascade,
-  status text not null default 'starting' check (status in ('starting','gemini_processing','claude_processing','chatgpt_verifying','chatgpt_correcting','github_pushing','testing','completed','failed')),
+  status text not null default 'starting' check (status in ('starting','gemini_processing','claude_processing','chatgpt_verifying','chatgpt_correcting','github_pushing','netlify_provisioning','testing','completed','failed')),
   current_step text,
   branch_name text,
   commit_sha text,
   pull_request_url text,
+  netlify_site_id text,
+  netlify_deploy_id text,
   logs jsonb not null default '[]'::jsonb,
   error text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table public.deployments add column if not exists netlify_site_id text;
+alter table public.deployments add column if not exists netlify_deploy_id text;
 
 alter table public.projects enable row level security;
 alter table public.github_connections enable row level security;
