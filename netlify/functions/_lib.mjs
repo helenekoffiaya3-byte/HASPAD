@@ -10,7 +10,7 @@ export const json = (data, status = 200) => new Response(JSON.stringify(data), {
 });
 
 export async function netlifyApi(path, options = {}) {
-  const token = globalThis.Netlify?.env?.get?.("NETLIFY_AUTH_TOKEN");
+  const token = globalThis.Netlify?.env?.get?.("NETLIFY_AUTH_TOKEN") || process.env.NETLIFY_AUTH_TOKEN;
   if (!token) throw new Error("Missing environment variable: NETLIFY_AUTH_TOKEN");
   const response = await fetch("https://api.netlify.com/api/v1" + path, {
     ...options,
