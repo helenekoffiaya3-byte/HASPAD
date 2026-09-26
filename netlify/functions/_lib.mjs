@@ -9,6 +9,38 @@ export const json = (data, status = 200) => new Response(JSON.stringify(data), {
   status, headers: { "content-type": "application/json", "cache-control": "no-store" }
 });
 
+export async function netlifyApi(path, options = {}) {
+  const token = globalThis.Netlify?.env?.get?.("NETLIFY_AUTH_TOKEN");
+  if (!token) throw new Error("Missing environment variable: NETLIFY_AUTH_TOKEN");
+  const response = await fetch("https://api.netlify.com/api/v1" + path, {
+    ...options,
+    headers: {
+      authorization: "Bearer " + token,
+      accept: "application/json",
+      "content-type": "application/json",
+      ...(options.headers || {})
+    }
+  });
+  const raw = await response.text();
+  let data = {};
+  try { data = JSON.parse(raw); } catch { data = { raw }; }
+  if (!response.ok) throw new Error("Netlify " + response.status + ": " + (data.message || raw.slice(0, 300)));
+  return data;
+}
+
+export async function waitForNetlifyDeploy(siteId, timeoutMs = 5 * 60 * 1000) {
+  const started = Date.now();
+  let last = null;
+  while (Date.now() - started < timeoutMs) {
+    last = await netlifyApi("/sites/" + encodeURIComponent(siteId));
+    const deploy = last.published_deploy;
+    if (deploy?.state === "ready") return { site: last, deploy };
+    if (deploy?.state === "error") throw new Error("Netlify build failed" + (deploy.error_message ? ": " + deploy.error_message : ""));
+    await new Promise(resolve => setTimeout(resolve, 5000));
+  }
+  return { site: last, deploy: last?.published_deploy || null, timedOut: true };
+}
+
 export const requireEnv = (...names) => {
   for (const name of names) if (!process.env[name]) throw new Error("Missing environment variable: " + name);
 };
