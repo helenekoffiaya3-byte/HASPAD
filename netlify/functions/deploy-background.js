@@ -14,7 +14,8 @@ const AUDIT_SCHEMA = {
     frontend_errors: { type: "array", items: { type: "string" } },
     backend_errors: { type: "array", items: { type: "string" } }
   },
-  required: ["approved", "reason", "frontend_errors", "backend_errors"]
+  required: ["approved", "reason", "frontend_errors", "backend_errors"],
+  additionalProperties: false
 };
 
 const KIT_PATHS = [
