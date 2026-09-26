@@ -148,10 +148,10 @@ begin
 end;
 $$;
 
-revoke all on function public.handle_new_user_credits() from public;
-revoke all on function public.debit_user_credits(uuid,integer,text,text,text) from public;
-revoke all on function public.refund_user_credits(uuid,integer,text,text) from public;
-revoke all on function public.apply_payment_credits(uuid) from public;
+revoke all on function public.handle_new_user_credits() from public,anon,authenticated;
+revoke all on function public.debit_user_credits(uuid,integer,text,text,text) from public,anon,authenticated;
+revoke all on function public.refund_user_credits(uuid,integer,text,text) from public,anon,authenticated;
+revoke all on function public.apply_payment_credits(uuid) from public,anon,authenticated;
 grant execute on function public.debit_user_credits(uuid,integer,text,text,text) to service_role;
 grant execute on function public.refund_user_credits(uuid,integer,text,text) to service_role;
 grant execute on function public.apply_payment_credits(uuid) to service_role;
