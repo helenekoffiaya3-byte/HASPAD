@@ -209,12 +209,14 @@ export const FILES_JSON_SCHEMA = {
           action: { type: "string", enum: ["create", "update", "delete"] },
           content: { type: "string" }
         },
-        required: ["path", "action", "content"]
+        required: ["path", "action", "content"],
+        additionalProperties: false
       }
     },
     summary: { type: "string" }
   },
-  required: ["files", "summary"]
+  required: ["files", "summary"],
+  additionalProperties: false
 };
 
 export async function gemini(prompt, schema = FILES_JSON_SCHEMA) {
