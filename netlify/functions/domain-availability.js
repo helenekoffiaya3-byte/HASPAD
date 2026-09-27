@@ -3,7 +3,7 @@ const EXTENSIONS=new Set([".com",".io",".fr",".ci"]);
 const validSubdomain=v=>/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(v);
 export default async(req)=>{
  if(req.method!=="POST")return json(405,{error:"Method Not Allowed"});
- let body;try{body=JSON.parse(req.body||"{}")}catch{return json(400,{error:"JSON invalide."})}
+ let body;try{body=await req.json()}catch{return json(400,{error:"JSON invalide."})}
  const subdomain=String(body.subdomain||"").trim().toLowerCase(),ext=String(body.domainExtension||"").trim().toLowerCase();
  if(!validSubdomain(subdomain)||!EXTENSIONS.has(ext))return json(400,{error:"Nom ou extension de domaine invalide."});
  const domain=subdomain+ext;
