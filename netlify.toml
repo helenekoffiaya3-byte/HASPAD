@@ -43,6 +43,16 @@
   to = "/.netlify/functions/auth-oauth-callback"
   status = 200
 [[redirects]]
+  from = "/api/domain-availability"
+  to = "/.netlify/functions/domain-availability"
+  status = 200
+
+[[redirects]]
+  from = "/api/configure-domain"
+  to = "/.netlify/functions/configure-domain"
+  status = 200
+
+[[redirects]]
   from = "/api/*"
   to = "/.netlify/functions/:splat"
   status = 200
