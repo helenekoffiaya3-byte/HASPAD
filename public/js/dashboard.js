@@ -1,4 +1,5 @@
 import{api,logout}from"./auth.js";
+import{initGit}from"./git.js";
 const $=s=>document.querySelector(s);
 const credits=$("#credits"),welcome=$("#welcome"),projects=$("#projectsList"),domainProject=$("#domainProject"),domainSubdomain=$("#domainSubdomain"),domainExtension=$("#domainExtension"),domainPreview=$("#domainPreview"),domainPrice=$("#domainPrice"),domainStatus=$("#domainStatus"),saveWrap=$("#saveDomainWrap"),save=$("#saveDomain"),message=$("#paymentMessage");
 let pricing=[],available=false;
@@ -37,6 +38,9 @@ async function load(){
     }
 
     const sd=await sr.json(),sites=Array.isArray(sd.sites)?sd.sites:[];
+    if(sites.length&&domainProject){
+      try{await initGit(sites[0].id)}catch(error){console.error("git-init:",error)}
+    }
     const count=$("#projectCount");
     if(count)count.textContent=sites.length;
 
