@@ -2,7 +2,7 @@ import {admin,json,authenticatedUser} from "./_credits.js";
 export default async(req)=>{
  if(req.method!=="POST")return json(405,{error:"Method Not Allowed"});
  const user=await authenticatedUser(req);if(!user)return json(401,{error:"Unauthorized"});
- let body;try{body=JSON.parse(req.body||"{}")}catch{return json(400,{error:"JSON invalide."})}
+ let body;try{body=await req.json()}catch{return json(400,{error:"JSON invalide."})}
  const siteId=body.site_id;if(!siteId)return json(400,{error:"site_id requis"});
  const {data:member}=await admin.from("sites").select("id").eq("id",siteId).eq("user_id",user.id).maybeSingle();
  if(!member)return json(403,{error:"Seul le propriétaire peut provisionner Startup."});
