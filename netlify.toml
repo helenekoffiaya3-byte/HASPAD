@@ -54,14 +54,6 @@
   from = "/api/configure-domain"
   to = "/.netlify/functions/configure-domain"
   status = 200
-[[redirects]]
-  from = "/api/init-domain-payment"
-  to = "/.netlify/functions/init-domain-payment"
-  status = 200
-[[redirects]]
-  from = "/api/cinetpay-domain-notify"
-  to = "/.netlify/functions/cinetpay-domain-notify"
-  status = 200
 
 [[redirects]]
   from = "/api/*"
