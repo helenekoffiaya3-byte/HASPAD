@@ -5,7 +5,7 @@ HASPAD est une plateforme SaaS de création, correction et déploiement de sites
 ## Production
 
 - Site public: https://haspad.com
-- API publique: https://api.haspad.com
+- API publique: https://haspad.com/api
 - Netlify: hébergement/déploiement.
 - Supabase: PostgreSQL, RLS et temps réel; l'identité applicative visible est gérée par Netlify Identity.
 
