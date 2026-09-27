@@ -3,7 +3,7 @@ import { paydunyaConfirm, applyAcceptedPayment } from "./_paydunya.js";
 
 export default async function handler(req) {
   if (req.method !== "POST") return json(405, { error: "METHOD_NOT_ALLOWED" });
-  const user = await authenticatedUser(event);
+  const user = await authenticatedUser(req);
   if (!user) return json(401, { error: "UNAUTHORIZED" });
   let body;
   try { body = await req.json(); } catch { return json(400, { error: "INVALID_JSON" }); }
