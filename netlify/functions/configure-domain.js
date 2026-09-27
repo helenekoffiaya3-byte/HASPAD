@@ -4,7 +4,7 @@ const validSubdomain=v=>/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(v);
 export default async(req)=>{
  if(req.method!=="POST")return json(405,{error:"Method Not Allowed"});
  const user=await authenticatedUser(req);if(!user)return json(401,{error:"Unauthorized"});
- let body;try{body=JSON.parse(req.body||"{}")}catch{return json(400,{error:"JSON invalide."})}
+ let body;try{body=await req.json()}catch{return json(400,{error:"JSON invalide."})}
  const projectId=String(body.projectId||"").trim(),subdomain=String(body.subdomain||"").trim().toLowerCase(),ext=String(body.domainExtension||"").trim().toLowerCase();
  if(!projectId||!validSubdomain(subdomain)||!EXTENSIONS.has(ext))return json(400,{error:"Données de domaine invalides."});
  const {data:membership,error:memberError}=await admin.from("sites").select("id").eq("id",projectId).eq("user_id",user.id).maybeSingle();
