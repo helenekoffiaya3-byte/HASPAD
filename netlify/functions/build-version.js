@@ -6,22 +6,26 @@ import { compilePage } from "../../src/compiler/engine.ts";
 function env(name){
   return globalThis.Netlify?.env?.get?.(name) ?? undefined;
 }
+
 const UUID=/^[0-9a-f-]{36}$/i;
 const netlifyHeaders=()=>({
   authorization:"Bearer "+(env("NETLIFY_AUTH_TOKEN")||""),
   accept:"application/json",
   "content-type":"application/json"
 });
+
 async function netlifyJson(url,options={}){
   const response=await fetch(url,{...options,headers:{...netlifyHeaders(),...(options.headers||{})}});
   const data=await response.json().catch(()=>({}));
   if(!response.ok)throw new Error(data?.message||data?.error||"NETLIFY_API_ERROR");
   return data;
 }
+
 function filePath(slug){
   const clean=String(slug||"index").replace(/^\/+|\/+$/g,"")||"index";
   return clean==="index"?"/index.html":"/"+clean+"/index.html";
 }
+
 function compileFiles(pages){
   const files={};
   for(const page of pages||[]){
@@ -36,18 +40,43 @@ function compileFiles(pages){
   if(!files["/index.html"])throw new Error("INDEX_PAGE_REQUIRED");
   return files;
 }
+
 async function finalizeFailed(buildId,errorMessage){
-  await admin.rpc("fail_build_and_refund",{p_build_id:buildId,p_error:String(errorMessage||"BUILD_FAILED").slice(0,1000)});
+  await admin.rpc("fail_build_and_refund",{
+    p_build_id:buildId,
+    p_error:String(errorMessage||"BUILD_FAILED").slice(0,1000)
+  });
 }
+
+async function getDeploy(deployId){
+  return netlifyJson(
+    "https://api.netlify.com/api/v1/deploys/"+encodeURIComponent(deployId),
+    {method:"GET"}
+  );
+}
+
+async function waitForPreparedDeploy(deployId){
+  let deploy=await getDeploy(deployId);
+  for(let attempt=0;attempt<15;attempt++){
+    if(["prepared","uploading","uploaded","ready"].includes(deploy.state))return deploy;
+    if(deploy.state==="error")throw new Error(deploy.error_message||"NETLIFY_DEPLOY_FAILED");
+    await new Promise(resolve=>setTimeout(resolve,500));
+    deploy=await getDeploy(deployId);
+  }
+  throw new Error("NETLIFY_DEPLOY_PREPARATION_TIMEOUT");
+}
+
 async function syncBuild(build){
   if(!build?.netlify_deploy_id)return build;
   if(!["pending","building"].includes(build.status))return build;
   try{
-    const deploy=await netlifyJson("https://api.netlify.com/api/v1/deploys/"+encodeURIComponent(build.netlify_deploy_id),{method:"GET"});
+    const deploy=await getDeploy(build.netlify_deploy_id);
     if(deploy.state==="ready"){
       const {data,error}=await admin.from("project_builds").update({
-        status:"success",deploy_url:deploy.ssl_url||deploy.deploy_ssl_url||deploy.deploy_url||deploy.url||null,
-        error_message:null,updated_at:new Date().toISOString()
+        status:"success",
+        deploy_url:deploy.ssl_url||deploy.deploy_ssl_url||deploy.deploy_url||deploy.url||null,
+        error_message:null,
+        updated_at:new Date().toISOString()
       }).eq("id",build.id).eq("status","building").select("*").single();
       if(error)throw error;
       return data;
@@ -62,38 +91,75 @@ async function syncBuild(build){
   }
   return build;
 }
+
 export default async(req)=>{
   const user=await authenticatedUser(req);
   if(!user)return json(401,{error:"Unauthorized"});
+
   const url=new URL(req.url);
+
   if(req.method==="GET"){
     const siteId=url.searchParams.get("siteId");
     if(!UUID.test(siteId||""))return json(400,{error:"siteId invalide."});
-    const {data:site,error:siteError}=await admin.from("sites").select("id").eq("id",siteId).eq("user_id",user.id).maybeSingle();
+
+    const {data:site,error:siteError}=await admin
+      .from("sites")
+      .select("id")
+      .eq("id",siteId)
+      .eq("user_id",user.id)
+      .maybeSingle();
+
     if(siteError)return json(500,{error:"Vérification du projet impossible."});
     if(!site)return json(403,{error:"Accès non autorisé à ce projet."});
-    const {data:build,error}=await admin.from("project_builds").select("*").eq("site_id",siteId).order("build_number",{ascending:false}).limit(1).maybeSingle();
+
+    const {data:build,error}=await admin
+      .from("project_builds")
+      .select("*")
+      .eq("site_id",siteId)
+      .order("build_number",{ascending:false})
+      .limit(1)
+      .maybeSingle();
+
     if(error)return json(500,{error:"Impossible de récupérer la version."});
     return json(200,{build:await syncBuild(build)});
   }
+
   if(req.method!=="POST")return json(405,{error:"Method Not Allowed"});
-  let body;try{body=await req.json()}catch{return json(400,{error:"JSON invalide."})}
+
+  let body;
+  try{body=await req.json()}catch{return json(400,{error:"JSON invalide."})}
+
   const siteId=String(body.siteId||"");
   if(!UUID.test(siteId))return json(400,{error:"siteId invalide."});
   if(!env("NETLIFY_AUTH_TOKEN"))return json(503,{error:"Netlify n'est pas encore configuré côté serveur."});
 
-  const {data:site,error:siteError}=await admin.from("sites").select("id,name,netlify_site_id").eq("id",siteId).eq("user_id",user.id).maybeSingle();
+  const {data:site,error:siteError}=await admin
+    .from("sites")
+    .select("id,name,netlify_site_id")
+    .eq("id",siteId)
+    .eq("user_id",user.id)
+    .maybeSingle();
+
   if(siteError)return json(500,{error:"Vérification du projet impossible."});
   if(!site)return json(403,{error:"Accès non autorisé à ce projet."});
   if(!site.netlify_site_id)return json(503,{error:"Aucune cible Netlify n'est associée à ce projet."});
 
-  const {count,error:countError}=await admin.from("project_builds").select("id",{count:"exact",head:true}).eq("site_id",siteId).eq("status","success");
+  // Any existing build reserves this project for redeployment pricing.
+  // The RPC still serializes the actual credit/build allocation.
+  const {count,error:countError}=await admin
+    .from("project_builds")
+    .select("id",{count:"exact",head:true})
+    .eq("site_id",siteId);
+
   if(countError)return json(500,{error:"Impossible de déterminer le coût du déploiement."});
   const cost=(count||0)===0?390:150;
 
   const {data:rpcResult,error:rpcError}=await admin.rpc("consume_credits_and_create_build",{
-    p_user_id:user.id,p_site_id:siteId,p_cost:cost
+    p_user_id:user.id,
+    p_site_id:siteId,
+    p_cost:cost
   });
+
   if(rpcError)return json(500,{error:"Transaction de déploiement impossible."});
   if(!rpcResult?.success){
     const status=rpcResult.error==="INSUFFICIENT_CREDITS"?402:rpcResult.error==="FORBIDDEN"?403:400;
@@ -101,34 +167,64 @@ export default async(req)=>{
   }
 
   const buildId=rpcResult.build_id;
+
   try{
-    const {data:pages,error:pagesError}=await admin.from("pages").select("slug,root_block").eq("site_id",siteId).order("slug");
+    const {data:pages,error:pagesError}=await admin
+      .from("pages")
+      .select("slug,root_block")
+      .eq("site_id",siteId)
+      .order("slug");
+
     if(pagesError)throw pagesError;
+
     const files=compileFiles(pages);
     const digest=Object.fromEntries(Object.entries(files).map(([path,file])=>[path,file.sha]));
+
     const deploy=await netlifyJson(
-      "https://api.netlify.com/api/v1/sites/"+encodeURIComponent(site.netlify_site_id)+"/deploys?production=true&title="+encodeURIComponent("HASP​AD "+rpcResult.version+" "+buildId).replace("\u200b",""),
+      "https://api.netlify.com/api/v1/sites/"+encodeURIComponent(site.netlify_site_id)+
+      "/deploys?production=true&title="+encodeURIComponent("HASPAD "+rpcResult.version+" "+buildId),
       {method:"POST",body:JSON.stringify({files:digest,async:true})}
     );
 
-    await admin.from("project_builds").update({
-      status:"building",netlify_deploy_id:deploy.id,triggered_at:new Date().toISOString(),updated_at:new Date().toISOString()
+    const prepared=await waitForPreparedDeploy(deploy.id);
+
+    const {error:stateError}=await admin.from("project_builds").update({
+      status:"building",
+      netlify_deploy_id:prepared.id,
+      triggered_at:new Date().toISOString(),
+      updated_at:new Date().toISOString()
     }).eq("id",buildId).eq("status","pending");
 
-    const required=new Set([...(deploy.required||[])]);
+    if(stateError)throw stateError;
+
+    const required=new Set(prepared.required||[]);
     for(const [path,file] of Object.entries(files)){
       if(!required.has(file.sha))continue;
-      const response=await fetch("https://api.netlify.com/api/v1/deploys/"+encodeURIComponent(deploy.id)+"/files"+path,{
-        method:"PUT",
-        headers:{authorization:"Bearer "+env("NETLIFY_AUTH_TOKEN"),"content-type":"application/octet-stream","content-length":String(Buffer.byteLength(file.body))}
-        ,body:Buffer.from(file.body)
-      });
+
+      const response=await fetch(
+        "https://api.netlify.com/api/v1/deploys/"+encodeURIComponent(prepared.id)+"/files"+path,
+        {
+          method:"PUT",
+          headers:{
+            authorization:"Bearer "+env("NETLIFY_AUTH_TOKEN"),
+            "content-type":"application/octet-stream",
+            "content-length":String(Buffer.byteLength(file.body))
+          },
+          body:Buffer.from(file.body)
+        }
+      );
+
       if(!response.ok)throw new Error("NETLIFY_FILE_UPLOAD_FAILED");
     }
 
     return json(202,{
-      success:true,buildId,version:rpcResult.version,buildNumber:rpcResult.build_number,
-      remainingCredits:rpcResult.remaining_credits,status:"building",netlifyDeployId:deploy.id
+      success:true,
+      buildId,
+      version:rpcResult.version,
+      buildNumber:rpcResult.build_number,
+      remainingCredits:rpcResult.remaining_credits,
+      status:"building",
+      netlifyDeployId:prepared.id
     });
   }catch(error){
     console.error("build-version:",error);
