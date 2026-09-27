@@ -1,11 +1,20 @@
-import {createClient} from "@supabase/supabase-js";
-const db=createClient(process.env.SUPABASE_URL,process.env.SUPABASE_SERVICE_ROLE_KEY);
+import {admin,json,authenticatedUser} from "./_credits.js";
+const UUID=/^[0-9a-f-]{36}$/i;
 export default async(req)=>{
-  const token=req.headers.authorization?.replace(/^Bearer\s+/i,"");if(!token)return {statusCode:401,body:"Unauthorized"};
-  const {data:{user},error:uerr}=await db.auth.getUser(token);if(uerr||!user)return {statusCode:401,body:"Unauthorized"};
-  const siteId=new URL(req.url,"https://haspad.local").searchParams.get("site_id");if(!siteId)return {statusCode:400,body:"site_id requis"};
-  const {data:member}=await db.from("site_members").select("role").eq("site_id",siteId).eq("user_id",user.id).maybeSingle();if(!member)return {statusCode:403,body:"Accès refusé à ce site."};
-  if(req.method==="GET"){const {data,error}=await db.from("pages").select("*").eq("site_id",siteId).order("slug");if(error)return {statusCode:500,body:"Database error"};return {statusCode:200,headers:{"content-type":"application/json","cache-control":"no-store"},body:JSON.stringify({pages:data,siteRole:"owner"})};}
-  if(!["owner","editor"].includes(member.role))return {statusCode:403,body:"Droits insuffisants."};
-  return {statusCode:405,body:"Method Not Allowed"};
+  if(req.method!=="GET")return json(405,{error:"Method Not Allowed"});
+  const user=await authenticatedUser(req);if(!user)return json(401,{error:"Unauthorized"});
+  const siteId=new URL(req.url,"https://haspad.local").searchParams.get("site_id");
+  if(!UUID.test(siteId||""))return json(400,{error:"site_id invalide."});
+  const {data:site,error:siteError}=await admin.from("sites").select("id").eq("id",siteId).eq("user_id",user.id).maybeSingle();
+  if(siteError)return json(500,{error:"Vérification du projet impossible."});
+  if(!site)return json(403,{error:"Accès refusé."});
+  const [{data:pages,error:pagesError},{data:structured,error:structuredError}]=await Promise.all([
+    admin.from("pages").select("id,slug,seo,root_block,created_at").eq("site_id",siteId).order("slug"),
+    admin.from("site_pages").select("id,slug,title,is_published,layout_config,updated_at").eq("site_id",siteId).order("slug")
+  ]);
+  if(pagesError||structuredError)return json(500,{error:"Impossible de charger les pages."});
+  const bySlug=new Map();
+  for(const p of pages||[])bySlug.set(p.slug,{id:p.id,slug:p.slug,title:p.seo?.title||p.slug,is_published:true,root:p.root_block||{}});
+  for(const p of structured||[])bySlug.set(p.slug,{id:p.id,slug:p.slug,title:p.title,is_published:p.is_published,root:p.layout_config||{}});
+  return json(200,{siteId,siteRole:"owner",pages:[...bySlug.values()]});
 };
