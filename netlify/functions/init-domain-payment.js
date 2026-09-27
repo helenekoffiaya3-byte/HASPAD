@@ -36,9 +36,9 @@ export default async (req) => {
   }
 
   const { data: membership, error: membershipError } = await admin
-    .from("site_members")
-    .select("site_id,role")
-    .eq("site_id", projectId)
+    .from("sites")
+    .select("id")
+    .eq("id", projectId)
     .eq("user_id", user.id)
     .maybeSingle();
 
