@@ -10,7 +10,7 @@ export default async req=>{
   const body=await req.json().catch(()=>null);
   if(!body?.prompt)return json(400,{error:"prompt requis."});
   const key=env("GEMINI_API_KEY");if(!key)return json(503,{error:"GEMINI_API_KEY_NOT_CONFIGURED"});
-  const model=env("GEMINI_MODEL")||"gemini-3.1-pro";
+  const model=env("GEMINI_MODEL")||"gemini-3.1-pro-preview";
   try{
     const ai=new GoogleGenAI({apiKey:key});
     const response=await ai.models.generateContent({
