@@ -1,5 +1,3 @@
-import crypto from "node:crypto";
-
 const env=n=>globalThis.Netlify?.env?.get?.(n)??process.env[n];
 
 function required(name){
@@ -8,52 +6,69 @@ function required(name){
   return value;
 }
 
-function sign(secret,timestamp,body){
-  return crypto.createHmac("sha256",secret).update(timestamp+"."+body).digest("hex");
+async function cf(path,options={}){
+  const accountId=required("CLOUDFLARE_ACCOUNT_ID");
+  const token=required("CLOUDFLARE_API_TOKEN");
+  const response=await fetch("https://api.cloudflare.com/client/v4/accounts/"+encodeURIComponent(accountId)+path,{
+    ...options,
+    headers:{
+      Authorization:"Bearer "+token,
+      "content-type":"application/json",
+      accept:"application/json",
+      ...(options.headers||{})
+    }
+  });
+  const data=await response.json().catch(()=>({}));
+  if(!response.ok||data?.success===false){
+    const message=data?.errors?.map?.(x=>x.message).filter(Boolean).join("; ")||"CLOUDFLARE_API_ERROR";
+    throw new Error(message);
+  }
+  return data?.result??data;
 }
 
 export function containerProviderStatus(){
-  const url=env("HASPAD_CONTAINER_PROVIDER_URL");
-  const secret=env("HASPAD_CONTAINER_PROVIDER_SHARED_SECRET");
+  const configured=Boolean(
+    env("CLOUDFLARE_ACCOUNT_ID")&&
+    env("CLOUDFLARE_API_TOKEN")
+  );
   return {
-    configured:Boolean(url&&secret),
-    provider:env("HASPAD_CONTAINER_PROVIDER")||"external-container-provider"
+    configured,
+    provider:"cloudflare-containers",
+    mode:"workers-builds"
   };
 }
 
 export async function deployContainer(input={}){
-  const base=required("HASPAD_CONTAINER_PROVIDER_URL").replace(/\/$/,"");
-  const secret=required("HASPAD_CONTAINER_PROVIDER_SHARED_SECRET");
-  const timestamp=String(Date.now());
-  const body=JSON.stringify({
-    providerVersion:"1",
-    runtimeId:input.runtimeId,
-    projectId:input.projectId,
+  const triggerUuid=input.cloudflareTriggerUuid||env("CLOUDFLARE_BUILD_TRIGGER_UUID");
+  if(!triggerUuid)throw new Error("CLOUDFLARE_BUILD_TRIGGER_UUID_NOT_CONFIGURED");
+
+  const payload={};
+  if(input.branch)payload.branch=String(input.branch);
+  if(input.commitSha)payload.commit_hash=String(input.commitSha);
+  if(!payload.branch&&!payload.commit_hash)payload.branch="main";
+
+  const build=await cf("/builds/triggers/"+encodeURIComponent(triggerUuid)+"/builds",{
+    method:"POST",
+    body:JSON.stringify(payload)
+  });
+
+  return {
+    provider:"cloudflare-containers",
+    mode:"workers-builds",
+    buildUuid:build?.build_uuid||build?.uuid||null,
+    status:build?.status||"queued",
+    publicUrl:build?.preview_url||build?.url||null,
     repository:{
       provider:input.repositoryProvider||"github",
       owner:input.repositoryOwner,
       name:input.repositoryName,
       branch:input.branch||"main",
       commitSha:input.commitSha||null
-    },
-    host:input.host,
-    port:Number(input.port||3000),
-    healthcheckPath:input.healthcheckPath||"/",
-    dockerfilePath:input.dockerfilePath||"Dockerfile",
-    runtime:input.runtime||"docker",
-    environment:input.env||{}
-  });
-  const response=await fetch(base+"/v1/deploy",{
-    method:"POST",
-    headers:{
-      "content-type":"application/json",
-      accept:"application/json",
-      "x-haspad-timestamp":timestamp,
-      "x-haspad-signature":sign(secret,timestamp,body)
-    },
-    body
-  });
-  const data=await response.json().catch(()=>({}));
-  if(!response.ok)throw new Error(data?.error||"CONTAINER_PROVIDER_DEPLOY_FAILED");
-  return data;
+    }
+  };
+}
+
+export async function getContainerBuild(buildUuid){
+  if(!buildUuid)throw new Error("CLOUDFLARE_BUILD_UUID_REQUIRED");
+  return cf("/builds/builds/"+encodeURIComponent(buildUuid),{method:"GET"});
 }
