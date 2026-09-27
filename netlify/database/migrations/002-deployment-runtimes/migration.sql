@@ -47,3 +47,12 @@ CREATE TABLE IF NOT EXISTS deployment_runtimes(
  created_at timestamptz NOT NULL DEFAULT now(),
  updated_at timestamptz NOT NULL DEFAULT now()
 );
+
+
+ALTER TABLE project_builds ADD COLUMN IF NOT EXISTS ai_architect_report jsonb;
+ALTER TABLE project_builds ADD COLUMN IF NOT EXISTS ai_devops_report text;
+ALTER TABLE project_builds ADD COLUMN IF NOT EXISTS ai_sre_report text;
+ALTER TABLE project_builds ADD COLUMN IF NOT EXISTS runtime_type text;
+ALTER TABLE project_builds ADD COLUMN IF NOT EXISTS runtime_service_id text;
+ALTER TABLE project_builds ADD COLUMN IF NOT EXISTS container_image text;
+ALTER TABLE project_builds ADD COLUMN IF NOT EXISTS healthcheck_path text;
