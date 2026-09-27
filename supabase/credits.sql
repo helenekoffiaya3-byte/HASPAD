@@ -111,7 +111,8 @@ begin
   v_new_balance:=v_balance+p_amount;
   update public.user_credits set credits_balance=v_new_balance,updated_at=now() where user_id=p_user_id;
   insert into public.credit_transactions(user_id,amount,type,reference_id,description,balance_after)
-  values(p_user_id,p_amount,'refund',p_reference_id,p_description,v_new_balance);
+  values(p_user_id,p_amount,'refund',p_reference_id,p_description,v_new_balance)
+  on conflict(user_id,reference_id) do nothing;
   return v_new_balance;
 end;
 $$;
