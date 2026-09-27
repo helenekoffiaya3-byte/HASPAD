@@ -2,12 +2,12 @@ import crypto from "node:crypto";
 import { authenticatedUser, admin, getPlan, json } from "./_credits.js";
 import { paydunyaCreateInvoice } from "./_paydunya.js";
 
-export async function handler(event) {
-  if (event.httpMethod !== "POST") return json(405, { error: "METHOD_NOT_ALLOWED" });
+export default async function handler(req) {
+  if (req.method !== "POST") return json(405, { error: "METHOD_NOT_ALLOWED" });
   const user = await authenticatedUser(event);
   if (!user) return json(401, { error: "UNAUTHORIZED" });
   let body;
-  try { body = JSON.parse(event.body || "{}"); } catch { return json(400, { error: "INVALID_JSON" }); }
+  try { body = await req.json(); } catch { return json(400, { error: "INVALID_JSON" }); }
   const plan = getPlan(body.planType);
   if (!plan) return json(400, { error: "INVALID_PLAN_OR_PRICE_NOT_CONFIGURED" });
   try {
