@@ -26,7 +26,6 @@ export async function provisionInitialSite(user,{siteName}={}){
     const subdomain=`${base}-${suffix}`;
     const {data:site,error}=await admin.from("sites").insert({user_id:user.id,name,subdomain,status:"draft"}).select("id,name,subdomain,custom_domain,status").single();
     if(!error){
-      await admin.from("site_members").upsert({site_id:site.id,user_id:user.id,role:"owner"},{onConflict:"site_id,user_id"});
       const root={id:"blk_root",type:"section",props:{semanticTag:"main"},styles:{desktop:{padding:"40px 20px"}},children:[{id:"blk_welcome_heading",type:"heading",props:{level:1,text:`Bienvenue sur ${name}`},styles:{desktop:{fontSize:"36px",textAlign:"center"}}}]};
       await admin.from("pages").insert({site_id:site.id,slug:"index",title:"Accueil",seo:{title:"Accueil"},root});
       return site;
@@ -36,9 +35,9 @@ export async function provisionInitialSite(user,{siteName}={}){
 }
 
 export async function getSites(userId){
-  const {data,error}=await admin.from("site_members").select("role,sites(id,name,subdomain,custom_domain,status,settings,created_at,updated_at)").eq("user_id",userId).order("created_at",{ascending:false});
+  const {data,error}=await admin.from("sites").select("id,name,subdomain,custom_domain,status,created_at").eq("user_id",userId).order("created_at",{ascending:false});
   if(error)throw error;
-  return (data||[]).map(x=>({...x.sites,user_role:x.role}));
+  return (data||[]).map(site=>({...site,user_role:"owner"}));
 }
 
 export async function getProfile(user){
