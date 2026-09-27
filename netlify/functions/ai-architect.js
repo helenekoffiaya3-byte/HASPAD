@@ -254,7 +254,7 @@ export default async (req) => {
 
     const { error: logError } = await admin.from("ai_activity_logs").insert({
       site_id: siteId,
-      agent_name: "gemini-3.8-flash",
+      agent_name: aiResult.model || "gemini-3.1-pro-preview",
       action_taken: blueprint.action,
       details: {
         prompt,
