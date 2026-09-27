@@ -7,12 +7,13 @@ HASPAD est une plateforme SaaS de création, correction et déploiement de sites
 - Site public: https://haspad.com
 - API publique: https://api.haspad.com
 - Netlify: hébergement/déploiement.
-- Supabase: Auth, PostgreSQL, RLS et temps réel.
+- Supabase: PostgreSQL, RLS et temps réel; l'identité applicative visible est gérée par Netlify Identity.
 
 ## Authentification
 
-- Email / mot de passe via Supabase Auth.
-- Google, GitHub, GitLab et Bitbucket via OAuth.
+- Email / mot de passe via Netlify Identity.
+- Google, GitHub, GitLab et Bitbucket via les fournisseurs externes Netlify Identity.
+- Une table de liaison serveur associe chaque identité Netlify aux données historiques Supabase sans exposer Supabase Auth au navigateur.
 - Les callbacks de production doivent utiliser `https://haspad.com`.
 - Ne jamais exposer `SUPABASE_SERVICE_ROLE_KEY` ou les secrets OAuth au navigateur.
 
@@ -28,7 +29,7 @@ Le débit des crédits est atomique dans PostgreSQL. Une erreur de compilation a
 
 ## Paiements
 
-Aucun prestataire de paiement n'est actuellement activé dans le dépôt. Les crédits et les écritures de facturation restent conservés côté serveur afin de pouvoir brancher ultérieurement un prestataire sans exposer de logique de paiement au navigateur.
+PayDunya est le prestataire de paiement activé côté serveur. Les montants XOF et les crédits sont déterminés côté serveur; les crédits ne sont attribués qu'après confirmation PayDunya vérifiée.
 
 ## Base de données
 
@@ -53,7 +54,7 @@ Dans Netlify, le domaine personnalisé doit être rattaché au site `haspad-ai`,
 
 ### Sécurité des crédits
 
-Le débit utilise un verrou PostgreSQL `FOR UPDATE` dans une fonction `SECURITY DEFINER` avec `search_path = ''`. Les remboursements sont idempotents grâce à la référence unique de transaction. Le navigateur ne fournit jamais le `user_id` de facturation: le serveur le déduit du JWT Supabase.
+Le débit utilise un verrou PostgreSQL `FOR UPDATE` dans une fonction `SECURITY DEFINER` avec `search_path = ''`. Les remboursements sont idempotents grâce à la référence unique de transaction. Le navigateur ne fournit jamais le `user_id` de facturation: le serveur vérifie le cookie JWT Netlify Identity puis résout l'identité vers l'utilisateur Supabase interne.
 
 ### Centre de contrôle
 
