@@ -11,16 +11,12 @@ function validSlug(value) {
 
 function validateBlueprint(blueprint) {
   if (!blueprint || typeof blueprint !== "object") throw new Error("BLUEPRINT_INVALID");
-  if (!["CREATE_OR_UPDATE_PAGE", "UPDATE_COMPONENTS"].includes(blueprint.action)) {
-    throw new Error("BLUEPRINT_ACTION_INVALID");
-  }
+  if (!["CREATE_OR_UPDATE_PAGE", "UPDATE_COMPONENTS"].includes(blueprint.action)) throw new Error("BLUEPRINT_ACTION_INVALID");
   const meta = blueprint.metadata;
   if (!meta || !validSlug(meta.page_slug) || typeof meta.page_title !== "string" || meta.page_title.length > 160) {
     throw new Error("BLUEPRINT_METADATA_INVALID");
   }
-  if (!Array.isArray(blueprint.components) || blueprint.components.length > 50) {
-    throw new Error("BLUEPRINT_COMPONENTS_INVALID");
-  }
+  if (!Array.isArray(blueprint.components) || blueprint.components.length > 50) throw new Error("BLUEPRINT_COMPONENTS_INVALID");
 
   return blueprint.components.map((component, index) => {
     if (!component || typeof component !== "object") throw new Error("COMPONENT_INVALID");
@@ -59,15 +55,15 @@ export default async (req) => {
     return json(400, { error: "siteId ou demande invalide." });
   }
 
-  const { data: membership, error: membershipError } = await admin
-    .from("site_members")
-    .select("role")
-    .eq("site_id", siteId)
+  const { data: site, error: siteError } = await admin
+    .from("sites")
+    .select("id")
+    .eq("id", siteId)
     .eq("user_id", user.id)
     .maybeSingle();
 
-  if (membershipError) return json(500, { error: "Vérification du projet impossible." });
-  if (!membership) return json(403, { error: "Accès non autorisé à ce projet." });
+  if (siteError) return json(500, { error: "Vérification du projet impossible." });
+  if (!site) return json(403, { error: "Accès non autorisé à ce projet." });
 
   try {
     const [{ data: pages, error: pagesError }, { data: components, error: componentsError }] = await Promise.all([
@@ -119,7 +115,6 @@ export default async (req) => {
         .from("site_components")
         .select("id")
         .eq("site_id", siteId)
-        .eq("page_id", page.id)
         .eq("identifier", component.id)
         .maybeSingle();
 
@@ -140,7 +135,7 @@ export default async (req) => {
       if (result.error) throw new Error("COMPONENT_WRITE_FAILED");
     }
 
-    await admin.from("ai_activity_logs").insert({
+    const { error: logError } = await admin.from("ai_activity_logs").insert({
       site_id: siteId,
       agent_name: "gemini-3.8-flash",
       action_taken: blueprint.action,
@@ -150,6 +145,7 @@ export default async (req) => {
         component_count: normalizedComponents.length
       }
     });
+    if (logError) throw new Error("AI_LOG_WRITE_FAILED");
 
     return json(200, {
       success: true,
