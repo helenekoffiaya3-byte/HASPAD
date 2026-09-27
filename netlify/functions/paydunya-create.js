@@ -4,7 +4,7 @@ import { paydunyaCreateInvoice } from "./_paydunya.js";
 
 export default async function handler(req) {
   if (req.method !== "POST") return json(405, { error: "METHOD_NOT_ALLOWED" });
-  const user = await authenticatedUser(event);
+  const user = await authenticatedUser(req);
   if (!user) return json(401, { error: "UNAUTHORIZED" });
   let body;
   try { body = await req.json(); } catch { return json(400, { error: "INVALID_JSON" }); }
@@ -12,7 +12,7 @@ export default async function handler(req) {
   if (!plan) return json(400, { error: "INVALID_PLAN_OR_PRICE_NOT_CONFIGURED" });
   try {
     const paymentId = crypto.randomUUID();
-    const transactionId = "HASP​AD-" + Date.now() + "-" + crypto.randomBytes(6).toString("hex");
+    const transactionId = "HASPAD-" + Date.now() + "-" + crypto.randomBytes(6).toString("hex");
     const { error: insertError } = await admin.from("payment_transactions").insert({
       id: paymentId, user_id: user.id, transaction_id: transactionId, provider: "paydunya",
       plan_type: plan.type, amount_xof: plan.amount, credits: plan.credits, status: "pending"
