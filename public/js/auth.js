@@ -1,9 +1,17 @@
-const TOKEN_KEY="haspad:access_token",REFRESH_KEY="haspad:refresh_token";
-export const getAccessToken=()=>sessionStorage.getItem(TOKEN_KEY);
-export const getUser=()=>{try{return JSON.parse(sessionStorage.getItem("haspad:user")||"null")}catch{return null}};
-export const setSession=s=>{if(s.accessToken)sessionStorage.setItem(TOKEN_KEY,s.accessToken);if(s.refreshToken)sessionStorage.setItem(REFRESH_KEY,s.refreshToken);if(s.user)sessionStorage.setItem("haspad:user",JSON.stringify(s.user));};
-export const clearSession=()=>{sessionStorage.removeItem(TOKEN_KEY);sessionStorage.removeItem(REFRESH_KEY);sessionStorage.removeItem("haspad:user");};
-async function refreshAccess(){const r=await fetch("/api/auth-refresh",{method:"POST",credentials:"include",headers:{"content-type":"application/json"}});if(!r.ok){clearSession();return false}const d=await r.json();if(d.accessToken)sessionStorage.setItem(TOKEN_KEY,d.accessToken);return !!d.accessToken;}
-export async function api(path,options={}){const h=new Headers(options.headers||{}),token=getAccessToken();if(options.body&&!h.has("content-type"))h.set("content-type","application/json");if(token)h.set("authorization","Bearer "+token);let r=await fetch(path,{...options,headers:h});if(r.status===401&&path!=="/api/auth-refresh"&&await refreshAccess()){h.set("authorization","Bearer "+getAccessToken());r=await fetch(path,{...options,headers:h})}return r;}
-export async function refreshSession(){return await refreshAccess();}
-export async function logout(){const token=getAccessToken();if(token)await fetch("/api/auth-logout",{method:"POST",headers:{authorization:"Bearer "+token},credentials:"include"});clearSession();}
+import { getUser as identityGetUser, logout as identityLogout, handleAuthCallback, refreshSession } from "https://cdn.jsdelivr.net/npm/@netlify/identity@2.0.0/+esm";
+
+let callbackPromise;
+export async function initAuth(){
+  if(!callbackPromise) callbackPromise=handleAuthCallback().catch(()=>null);
+  return callbackPromise;
+}
+export async function getUser(){await initAuth();return identityGetUser();}
+export async function api(path,options={}){
+  await initAuth();
+  const headers=new Headers(options.headers||{});
+  if(options.body&&!headers.has("content-type"))headers.set("content-type","application/json");
+  return fetch(path,{...options,headers,credentials:"include"});
+}
+export async function refreshAuth(){return refreshSession();}
+export async function logout(){await identityLogout();location.href="/";}
+await initAuth();
