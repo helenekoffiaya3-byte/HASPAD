@@ -10,7 +10,7 @@ export const netlifyUser=()=>getNetlifyUser();
 export async function ensureShadowUser(user){
   if(!user?.id||!user.email)return null;
   const {data:link}=await admin.from("netlify_identity_links").select("supabase_user_id").eq("netlify_user_id",String(user.id)).maybeSingle();
-  if(link?.supabase_user_id)return link.supabase_user_id;
+  if(link?.supabase_user_id){ await provisionUserData({id:link.supabase_user_id},user); return link.supabase_user_id; }
   const metadata={full_name:user.userMetadata?.full_name||user.name||null,avatar_url:user.pictureUrl||null};
   const password=crypto.randomBytes(32).toString("base64url")+"A1!";
   let shadow;
@@ -29,6 +29,8 @@ async function provisionUserData(shadow,user){
   const {data:credit}=await admin.from("user_credits").select("user_id").eq("user_id",shadow.id).maybeSingle();
   if(!credit)await admin.from("user_credits").insert({user_id:shadow.id,credits_balance:500});
   await admin.from("profiles").upsert({id:shadow.id,full_name:user.userMetadata?.full_name||user.name||null,avatar_url:user.pictureUrl||null,is_email_verified:true},{onConflict:"id"});
+  const {data:sites}=await admin.from("sites").select("id").eq("user_id",shadow.id).limit(1);
+  if(!sites?.length) await provisionInitialSite(shadow,{siteName:user.userMetadata?.site_name||"Mon Premier Site"});
 }
 export async function authenticatedUser(){
   const user=await getNetlifyUser(); if(!user)return null;
