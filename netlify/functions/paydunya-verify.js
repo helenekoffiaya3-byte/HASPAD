@@ -12,7 +12,7 @@ export default async function handler(req) {
   try {
     const { data: rows, error } = await admin.from("payment_transactions")
       .select("id,user_id,amount_xof,credits,status,processed_at,provider_response")
-      .eq("user_id", user.id).eq("provider", "paydunya").contains("provider_response", { token })
+      .eq("user_id", user.id).eq("provider", "paydunya").eq("provider_response->>token", token)
       .order("created_at", { ascending: false }).limit(1);
     if (error) throw error;
     const payment = rows?.[0];
