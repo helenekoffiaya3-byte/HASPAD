@@ -3,45 +3,10 @@
   functions = "netlify/functions"
 
 [[redirects]]
-  from = "/api/auth/register"
-  to = "/.netlify/functions/auth-register"
-  status = 200
-[[redirects]]
-  from = "/api/auth/login"
-  to = "/.netlify/functions/auth-login"
-  status = 200
-[[redirects]]
-  from = "/api/auth/refresh"
-  to = "/.netlify/functions/auth-refresh"
-  status = 200
-[[redirects]]
-  from = "/api/auth/logout"
-  to = "/.netlify/functions/auth-logout"
-  status = 200
-[[redirects]]
   from = "/api/auth/me"
   to = "/.netlify/functions/auth-me"
   status = 200
-[[redirects]]
-  from = "/api/auth/forgot-password"
-  to = "/.netlify/functions/auth-forgot-password"
-  status = 200
-[[redirects]]
-  from = "/api/auth/resend-verification"
-  to = "/.netlify/functions/auth-resend-verification"
-  status = 200
-[[redirects]]
-  from = "/api/auth/config"
-  to = "/.netlify/functions/auth-config"
-  status = 200
-[[redirects]]
-  from = "/api/auth/oauth"
-  to = "/.netlify/functions/auth-oauth"
-  status = 200
-[[redirects]]
-  from = "/api/auth/oauth-callback"
-  to = "/.netlify/functions/auth-oauth-callback"
-  status = 200
+
 [[redirects]]
   from = "/api/domain-availability"
   to = "/.netlify/functions/domain-availability"
@@ -71,37 +36,30 @@
   from = "/dashboard"
   to = "/dashboard.html"
   status = 200
-
 [[redirects]]
   from = "/editor"
   to = "/editor.html"
   status = 200
-
 [[redirects]]
   from = "/control-center"
   to = "/control-center.html"
   status = 200
-
 [[redirects]]
   from = "/settings"
   to = "/settings.html"
   status = 200
-
 [[redirects]]
   from = "/terms"
   to = "/terms.html"
   status = 200
-
 [[redirects]]
   from = "/privacy"
   to = "/privacy.html"
   status = 200
-
 [[redirects]]
   from = "/legal"
   to = "/legal.html"
   status = 200
-
 [[redirects]]
   from = "/pricing"
   to = "/dashboard.html#pricing"
