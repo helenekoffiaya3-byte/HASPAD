@@ -13,15 +13,15 @@ export default async (req) => {
     return json(400, { error: "siteId invalide." });
   }
 
-  const { data: membership, error: membershipError } = await admin
-    .from("site_members")
-    .select("role")
-    .eq("site_id", siteId)
+  const { data: site, error: siteError } = await admin
+    .from("sites")
+    .select("id")
+    .eq("id", siteId)
     .eq("user_id", user.id)
     .maybeSingle();
 
-  if (membershipError) return json(500, { error: "Vérification du projet impossible." });
-  if (!membership) return json(403, { error: "Accès non autorisé à ce projet." });
+  if (siteError) return json(500, { error: "Vérification du projet impossible." });
+  if (!site) return json(403, { error: "Accès non autorisé à ce projet." });
 
   try {
     const build = await getLatestBuild(siteId);
