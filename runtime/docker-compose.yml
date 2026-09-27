@@ -1,0 +1,28 @@
+services:
+  traefik:
+    image: traefik:v3.5
+    restart: unless-stopped
+    command:
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --entrypoints.web.address=:80
+      - --api.dashboard=false
+    ports:
+      - "80:80"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks: [haspad-runtime]
+  worker:
+    build: ./worker
+    restart: unless-stopped
+    environment:
+      PORT: "3001"
+      DOCKER_SOCKET: /var/run/docker.sock
+      DOCKER_NETWORK: haspad-runtime
+      RUNTIME_SHARED_SECRET: ${RUNTIME_SHARED_SECRET}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks: [haspad-runtime]
+networks:
+  haspad-runtime:
+    name: haspad-runtime
