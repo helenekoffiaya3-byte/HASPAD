@@ -21,3 +21,6 @@ node_modules/
 # Build
 dist/
 build/
+
+# Runtime certificates and state
+runtime/letsencrypt/
