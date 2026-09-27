@@ -7,7 +7,7 @@ const env=n=>globalThis.Netlify?.env?.get?.(n)??process.env[n];
 export default async req=>{
  if(req.method!=="POST")return json(405,{error:"Method Not Allowed"});const user=await getUser();if(!user)return json(401,{error:"Unauthorized"});
  const b=await req.json().catch(()=>null);if(!b?.siteId||!b?.repositoryOwner||!b?.repositoryName)return json(400,{error:"siteId, repositoryOwner et repositoryName requis"});
- const site=(await admin.from("sites").select("id,user_id,subdomain").eq("id",b.siteId).maybeSingle()).data;if(!site||String(site.user_id)!==String(user.id))return json(403,{error:"Forbidden"});
+ const site=(await admin.from("sites").select("id,user_id,subdomain,custom_domain").eq("id",b.siteId).maybeSingle()).data;if(!site||String(site.user_id)!==String(user.id))return json(403,{error:"Forbidden"});
  const runtime=String(b.runtimeTarget||"docker");if(runtime!=="docker"&&runtime!=="docker-compose")return json(400,{error:"STATIC_USE_NETLIFY_PATH"});const requestedHost=String(b.host||site.subdomain+".haspad.com").toLowerCase();const allowedHost=requestedHost===String(site.subdomain).toLowerCase()+".haspad.com"||(site.custom_domain&&requestedHost===String(site.custom_domain).toLowerCase());if(!allowedHost)return json(400,{error:"HOST_NOT_AUTHORIZED"});
  const c=await githubConnection(user.id);if(!c)return json(400,{error:"GITHUB_NOT_CONNECTED"});
  const cost=Number(env("GIT_DEPLOY_CREDIT_COST")||300),referenceId=crypto.randomUUID();
