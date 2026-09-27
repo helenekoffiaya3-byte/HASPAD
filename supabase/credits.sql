@@ -1,4 +1,4 @@
--- HASPAD credits and CinetPay billing. Production-safe, atomic and idempotent.
+-- HASPAD credits and provider-neutral billing.
 create table if not exists public.user_credits (
   user_id uuid primary key references auth.users(id) on delete cascade,
   credits_balance integer not null default 500 check (credits_balance >= 0),
@@ -20,7 +20,7 @@ create table if not exists public.subscriptions (
   user_id uuid not null references auth.users(id) on delete cascade,
   plan_name text not null check (plan_name in ('startup','pro','business')),
   status text not null default 'pending' check (status in ('pending','active','failed','cancelled')),
-  provider text not null default 'cinetpay',
+  provider text not null default 'manual',
   provider_transaction_id text unique,
   credits_granted integer not null default 0,
   amount_xof integer,
@@ -33,7 +33,7 @@ create table if not exists public.payment_transactions (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
   transaction_id text not null unique,
-  provider text not null default 'cinetpay',
+  provider text not null default 'manual',
   plan_type text not null check (plan_type in ('startup','pro','business')),
   amount_xof integer not null,
   credits integer not null,
@@ -83,15 +83,11 @@ begin
   if p_cost <= 0 then raise exception 'INVALID_CREDIT_COST'; end if;
   if p_type not in ('deployment','redeployment') then raise exception 'INVALID_CREDIT_TYPE'; end if;
   if p_reference_id is null or length(p_reference_id)=0 then raise exception 'REFERENCE_REQUIRED'; end if;
-
-  select balance_after into v_existing from public.credit_transactions
-  where user_id=p_user_id and reference_id=p_reference_id and amount=-p_cost limit 1;
+  select balance_after into v_existing from public.credit_transactions where user_id=p_user_id and reference_id=p_reference_id and amount=-p_cost limit 1;
   if v_existing is not null then return v_existing; end if;
-
   select credits_balance into v_balance from public.user_credits where user_id=p_user_id for update;
   if v_balance is null then raise exception 'CREDIT_ACCOUNT_NOT_FOUND'; end if;
   if v_balance < p_cost then raise exception 'INSUFFICIENT_CREDITS'; end if;
-
   v_new_balance:=v_balance-p_cost;
   update public.user_credits set credits_balance=v_new_balance,updated_at=now() where user_id=p_user_id;
   insert into public.credit_transactions(user_id,amount,type,reference_id,description,balance_after)
@@ -108,16 +104,14 @@ as $$
 declare v_balance integer; v_new_balance integer; v_existing integer;
 begin
   if p_amount <= 0 then raise exception 'INVALID_REFUND_AMOUNT'; end if;
-  select balance_after into v_existing from public.credit_transactions
-  where user_id=p_user_id and reference_id=p_reference_id and type='refund' limit 1;
+  select balance_after into v_existing from public.credit_transactions where user_id=p_user_id and reference_id=p_reference_id and type='refund' limit 1;
   if v_existing is not null then return v_existing; end if;
   select credits_balance into v_balance from public.user_credits where user_id=p_user_id for update;
   if v_balance is null then raise exception 'CREDIT_ACCOUNT_NOT_FOUND'; end if;
   v_new_balance:=v_balance+p_amount;
   update public.user_credits set credits_balance=v_new_balance,updated_at=now() where user_id=p_user_id;
   insert into public.credit_transactions(user_id,amount,type,reference_id,description,balance_after)
-  values(p_user_id,p_amount,'refund',p_reference_id,p_description,v_new_balance)
-  on conflict(user_id,reference_id) do nothing;
+  values(p_user_id,p_amount,'refund',p_reference_id,p_description,v_new_balance);
   return v_new_balance;
 end;
 $$;
@@ -130,11 +124,9 @@ begin
   select * into v_payment from public.payment_transactions where id=p_payment_id for update;
   if not found then raise exception 'PAYMENT_NOT_FOUND'; end if;
   if v_payment.status <> 'accepted' then raise exception 'PAYMENT_NOT_ACCEPTED'; end if;
-
   select credits_balance into v_balance from public.user_credits where user_id=v_payment.user_id for update;
   if v_balance is null then raise exception 'CREDIT_ACCOUNT_NOT_FOUND'; end if;
   if v_payment.processed_at is not null then return v_balance; end if;
-
   v_new_balance:=v_balance+v_payment.credits;
   update public.user_credits set credits_balance=v_new_balance,updated_at=now() where user_id=v_payment.user_id;
   insert into public.credit_transactions(user_id,amount,type,reference_id,description,balance_after)
