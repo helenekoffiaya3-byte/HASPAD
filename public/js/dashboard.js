@@ -4,6 +4,8 @@ const $=s=>document.querySelector(s);
 const credits=$("#credits"),welcome=$("#welcome"),projects=$("#projectsList"),domainProject=$("#domainProject"),domainSubdomain=$("#domainSubdomain"),domainExtension=$("#domainExtension"),domainPreview=$("#domainPreview"),domainPrice=$("#domainPrice"),domainStatus=$("#domainStatus"),saveWrap=$("#saveDomainWrap"),save=$("#saveDomain"),message=$("#paymentMessage");
 let pricing=[],available=false;
 
+domainProject?.addEventListener("change",()=>{if(domainProject.value)initGit(domainProject.value).catch(error=>console.error("git-init:",error))});
+
 const esc=v=>String(v??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const xof=v=>new Intl.NumberFormat("fr-FR").format(Number(v))+" XOF/an";
 
