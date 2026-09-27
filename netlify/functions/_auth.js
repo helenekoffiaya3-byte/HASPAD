@@ -27,7 +27,11 @@ export async function provisionInitialSite(user,{siteName}={}){
     const {data:site,error}=await admin.from("sites").insert({user_id:user.id,name,subdomain,status:"draft"}).select("id,name,subdomain,custom_domain,status").single();
     if(!error){
       const root={id:"blk_root",type:"section",props:{semanticTag:"main"},styles:{desktop:{padding:"40px 20px"}},children:[{id:"blk_welcome_heading",type:"heading",props:{level:1,text:`Bienvenue sur ${name}`},styles:{desktop:{fontSize:"36px",textAlign:"center"}}}]};
-      await admin.from("pages").insert({site_id:site.id,slug:"index",seo:{title:"Accueil"},root_block:root});
+      const {error:pageError}=await admin.from("pages").insert({site_id:site.id,slug:"index",seo:{title:"Accueil"},root_block:root});
+      if(pageError){
+        await admin.from("sites").delete().eq("id",site.id).eq("user_id",user.id);
+        throw pageError;
+      }
       return site;
     }
   }
