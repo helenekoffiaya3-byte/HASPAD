@@ -69,3 +69,7 @@
   for = "/api/*"
   [headers.values]
     Cache-Control = "no-store"
+
+# GitHub -> Netlify deployment source
+[build.environment]
+  NODE_VERSION = "20"
