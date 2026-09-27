@@ -1,6 +1,6 @@
 import { GoogleGenAI } from "@google/genai";
 
-const MODEL = "gemini-3.8-flash";
+const MODEL = process.env.GEMINI_MODEL || "gemini-3.1-pro-preview";
 
 const BLUEPRINT_SCHEMA = {
   type: "object",
