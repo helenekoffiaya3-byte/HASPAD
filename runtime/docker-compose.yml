@@ -6,12 +6,21 @@ services:
       - --providers.docker=true
       - --providers.docker.exposedbydefault=false
       - --entrypoints.web.address=:80
+      - --entrypoints.websecure.address=:443
+      - --entrypoints.web.http.redirections.entrypoint.to=websecure
+      - --certificatesresolvers.le.acme.httpchallenge=true
+      - --certificatesresolvers.le.acme.httpchallenge.entrypoint=web
+      - --certificatesresolvers.le.acme.email=${LETSENCRYPT_EMAIL}
+      - --certificatesresolvers.le.acme.storage=/letsencrypt/acme.json
       - --api.dashboard=false
     ports:
       - "80:80"
+      - "443:443"
     volumes:
+      - ./letsencrypt:/letsencrypt
       - /var/run/docker.sock:/var/run/docker.sock:ro
     networks: [haspad-runtime]
+
   worker:
     build: ./worker
     restart: unless-stopped
@@ -20,9 +29,17 @@ services:
       DOCKER_SOCKET: /var/run/docker.sock
       DOCKER_NETWORK: haspad-runtime
       RUNTIME_SHARED_SECRET: ${RUNTIME_SHARED_SECRET}
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.haspad-runtime.rule=Host(`${RUNTIME_CONTROL_DOMAIN}`)
+      - traefik.http.routers.haspad-runtime.entrypoints=websecure
+      - traefik.http.routers.haspad-runtime.tls=true
+      - traefik.http.routers.haspad-runtime.tls.certresolver=le
+      - traefik.http.services.haspad-runtime.loadbalancer.server.port=3001
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     networks: [haspad-runtime]
+
 networks:
   haspad-runtime:
     name: haspad-runtime
