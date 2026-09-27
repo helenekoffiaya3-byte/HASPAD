@@ -6,7 +6,7 @@ HASPAD est une plateforme SaaS de création, correction et déploiement de sites
 
 - Site public: https://haspad.com
 - API publique: https://api.haspad.com
-- Netlify: hébergement/déploiement, sans être l'identité publique du produit.
+- Netlify: hébergement/déploiement.
 - Supabase: Auth, PostgreSQL, RLS et temps réel.
 
 ## Authentification
@@ -26,19 +26,9 @@ HASPAD est une plateforme SaaS de création, correction et déploiement de sites
 
 Le débit des crédits est atomique dans PostgreSQL. Une erreur de compilation après débit déclenche un remboursement serveur.
 
-## CinetPay
+## Paiements
 
-Le paiement utilise l'API Checkout CinetPay. Le serveur crée d'abord la transaction, puis redirige vers le guichet. Le webhook vérifie toujours le statut réel auprès de CinetPay avant d'accorder les crédits et protège le traitement contre les doublons.
-
-Variables obligatoires en production:
-
-- `CINETPAY_API_KEY`
-- `CINETPAY_SITE_ID`
-- `CINETPAY_SECRET_KEY`
-- `CINETPAY_PRO_AMOUNT_XOF`
-- `CINETPAY_BUSINESS_AMOUNT_XOF`
-
-Le montant et les crédits sont déterminés côté serveur; le navigateur ne peut pas les modifier.
+Aucun prestataire de paiement n'est actuellement activé dans le dépôt. Les crédits et les écritures de facturation restent conservés côté serveur afin de pouvoir brancher ultérieurement un prestataire sans exposer de logique de paiement au navigateur.
 
 ## Base de données
 
@@ -48,19 +38,17 @@ Les tables de crédits et de paiement ont RLS. Les fonctions privilégiées sont
 
 ## Domaine
 
-Le dépôt ne peut pas, à lui seul, créer le certificat DNS de `haspad.com`. Dans Netlify, le domaine personnalisé doit être rattaché au site `haspad-ai`, puis le DNS doit pointer vers Netlify. Le sous-domaine `api.haspad.com` doit également être configuré vers l'infrastructure qui exécute les fonctions API.
+Le dépôt gère la vérification RDAP et l'enregistrement de la configuration du domaine. L'achat/enregistrement auprès d'un registrar n'est pas activé tant qu'un prestataire de paiement et un adaptateur registrar n'ont pas été configurés.
 
-Une fois le DNS actif, aucune URL `netlify.app` ne doit être utilisée comme URL publique par l'application.
-
+Dans Netlify, le domaine personnalisé doit être rattaché au site `haspad-ai`, puis le DNS doit pointer vers Netlify. Le sous-domaine `api.haspad.com` doit également être configuré vers l'infrastructure qui exécute les fonctions API.
 
 ## Offre Startup
 
 - 4 000 crédits.
-- Montant XOF configuré exclusivement par `CINETPAY_STARTUP_AMOUNT_XOF`.
 - Centre de contrôle logique isolé par projet.
 - Métriques serveur, erreurs, pages, composants, recommandations et journal des agents.
 - Agent Gemini 3.8 Flash configurable par `GEMINI_MODEL`.
-- L'agent reçoit une demande et retourne un **blueprint JSON validé**, jamais du SQL arbitraire exécutable. Cela limite les risques d'injection DDL et maintient le périmètre du centre de contrôle.
+- L'agent reçoit une demande et retourne un **blueprint JSON validé**, jamais du SQL arbitraire exécutable.
 - GitHub, GitLab et Bitbucket restent des intégrations distinctes; leurs secrets ne sont jamais exposés au navigateur.
 
 ### Sécurité des crédits
@@ -69,4 +57,4 @@ Le débit utilise un verrou PostgreSQL `FOR UPDATE` dans une fonction `SECURITY 
 
 ### Centre de contrôle
 
-Appliquer `supabase/control_center.sql` après le schéma principal. RLS est activé sur les tables exposées et l'accès est limité aux membres du projet. Supabase recommande RLS sur les tables exposées et un contrôle précis des grants; les fonctions privilégiées doivent être protégées. 
+Appliquer `supabase/control_center.sql` après le schéma principal. RLS est activé sur les tables exposées et l'accès est limité aux membres du projet.
