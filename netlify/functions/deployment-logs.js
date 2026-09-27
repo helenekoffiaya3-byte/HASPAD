@@ -1,0 +1,4 @@
+import { getUser } from "@netlify/identity";
+import { admin, json } from "./_credits.js";
+import { runtimeRequest } from "./_runtime.js";
+export default async req=>{if(req.method!=="GET")return json(405,{error:"Method Not Allowed"});const user=await getUser();if(!user)return json(401,{error:"Unauthorized"});const id=new URL(req.url).searchParams.get("buildId");if(!id)return json(400,{error:"buildId requis"});const b=(await admin.from("project_builds").select("id,user_id").eq("id",id).maybeSingle()).data;if(!b||String(b.user_id)!==String(user.id))return json(404,{error:"BUILD_NOT_FOUND"});try{return json(200,{success:true,...await runtimeRequest("/v1/logs/"+encodeURIComponent(id),{},"GET")})}catch{return json(502,{error:"RUNTIME_LOGS_UNAVAILABLE"})}};
