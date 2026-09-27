@@ -5,7 +5,7 @@ export default async(req)=>{
   const user=await authenticatedUser(req);if(!user)return json(401,{error:"Unauthorized"});
   const siteId=new URL(req.url,"https://haspad.local").searchParams.get("site_id");
   if(!UUID.test(siteId||""))return json(400,{error:"site_id invalide."});
-  const {data:site,error:siteError}=await admin.from("sites").select("id").eq("id",siteId).eq("user_id",user.id).maybeSingle();
+  const {data:site,error:siteError}=await admin.from("sites").select("id,name").eq("id",siteId).eq("user_id",user.id).maybeSingle();
   if(siteError)return json(500,{error:"Vérification du projet impossible."});
   if(!site)return json(403,{error:"Accès refusé."});
   const [{data:pages,error:pagesError},{data:structured,error:structuredError}]=await Promise.all([
@@ -15,6 +15,6 @@ export default async(req)=>{
   if(pagesError||structuredError)return json(500,{error:"Impossible de charger les pages."});
   const bySlug=new Map();
   for(const p of pages||[])bySlug.set(p.slug,{id:p.id,slug:p.slug,title:p.seo?.title||p.slug,is_published:true,root:p.root_block||{}});
-  for(const p of structured||[])bySlug.set(p.slug,{id:p.id,slug:p.slug,title:p.title,is_published:p.is_published,root:p.layout_config||{}});
-  return json(200,{siteId,siteRole:"owner",pages:[...bySlug.values()]});
+  for(const p of structured||[]){const current=bySlug.get(p.slug);bySlug.set(p.slug,{id:current?.id||p.id,slug:p.slug,title:p.title||current?.title||p.slug,is_published:p.is_published,root:current?.root||p.layout_config||{}})}
+  return json(200,{siteId,siteName:site.name,siteRole:"owner",pages:[...bySlug.values()]});
 };
