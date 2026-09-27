@@ -2,8 +2,8 @@ import crypto from "node:crypto";
 import { getUser } from "@netlify/identity";
 import { admin, json } from "./_credits.js";
 import { githubConnection } from "./_github.js";
-import { runtimeRequest } from "./_runtime.js";
 import { deploymentTarget } from "./_deployment-router.js";
+import { containerProviderStatus, deployContainer } from "./_container-provider.js";
 
 const env=n=>globalThis.Netlify?.env?.get?.(n)??process.env[n];
 
@@ -32,15 +32,16 @@ export default async req=>{
       runtimeTarget:routing.target,
       provider:routing.provider,
       routingReason:routing.reason,
-      message:"Ce projet doit être déployé par le chemin Git/Netlify correspondant à son analyse."
+      message:"Ce projet doit passer par le chemin Git/Netlify correspondant à son analyse."
     });
 
-  if(!env("HASPAD_RUNTIME_URL")||!env("HASPAD_RUNTIME_SHARED_SECRET"))
+  const provider=containerProviderStatus();
+  if(!provider.configured)
     return json(503,{
-      error:"RUNTIME_NOT_CONFIGURED",
+      error:"CONTAINER_PROVIDER_NOT_CONFIGURED",
+      provider:provider.provider,
       runtimeTarget:routing.target,
-      provider:routing.provider,
-      message:"Aucun provider conteneur n'est configuré. Le VPS historique reste désactivé."
+      message:"Le provider conteneur n'est pas configuré. Le VPS historique reste désactivé."
     });
 
   const requestedHost=String(b.host||site.subdomain+".haspad.com").toLowerCase();
@@ -71,7 +72,7 @@ export default async req=>{
   const buildId=consumed.data.build_id;
   try{
     const host=requestedHost.replace(/[^a-z0-9.-]/g,"");
-    await admin.from("deployment_projects").upsert({
+    const saved=await admin.from("deployment_projects").upsert({
       site_id:b.siteId,
       user_id:String(user.id),
       source_type:"github",
@@ -87,34 +88,38 @@ export default async req=>{
       healthcheck_path:b.healthcheckPath||"/",
       updated_at:new Date().toISOString()
     },{onConflict:"site_id"});
+    if(saved.error)throw saved.error;
 
-    const result=await runtimeRequest("/v1/deploy",{
+    const result=await deployContainer({
       runtimeId:buildId,
       projectId:b.siteId,
+      repositoryProvider:"github",
       repositoryOwner:b.repositoryOwner,
       repositoryName:b.repositoryName,
       branch:b.branch||"main",
       commitSha:b.commitSha||null,
-      githubToken:c.token,
       host,
       port:Number(b.port||3000),
       healthcheckPath:b.healthcheckPath||"/",
+      dockerfilePath:b.dockerfilePath||"Dockerfile",
+      runtime,
       env:b.env||{}
     });
 
+    const publicUrl=result.publicUrl||result.url||null;
     await admin.from("project_builds").update({
       status:"success",
-      deploy_url:result.publicUrl,
+      deploy_url:publicUrl,
       triggered_at:new Date().toISOString(),
       updated_at:new Date().toISOString()
     }).eq("id",buildId);
 
-    return json(201,{success:true,buildId,runtime:result,runtimeTarget:routing.target,provider:routing.provider});
+    return json(201,{success:true,buildId,runtime:result,runtimeTarget:routing.target,provider:provider.provider});
   }catch(e){
     await admin.rpc("fail_build_and_refund",{
       p_build_id:buildId,
-      p_error:String(e?.message||"RUNTIME_DEPLOY_FAILED").slice(0,1000)
+      p_error:String(e?.message||"CONTAINER_PROVIDER_DEPLOY_FAILED").slice(0,1000)
     });
-    return json(502,{error:"RUNTIME_DEPLOY_FAILED",runtimeTarget:routing.target,provider:routing.provider});
+    return json(502,{error:"CONTAINER_PROVIDER_DEPLOY_FAILED",runtimeTarget:routing.target,provider:provider.provider});
   }
 };
