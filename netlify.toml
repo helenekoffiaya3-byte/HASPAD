@@ -81,6 +81,31 @@
   status = 200
 
 [[redirects]]
+  from = "/editor"
+  to = "/editor.html"
+  status = 200
+
+[[redirects]]
+  from = "/control-center"
+  to = "/control-center.html"
+  status = 200
+
+[[redirects]]
+  from = "/terms"
+  to = "/terms.html"
+  status = 200
+
+[[redirects]]
+  from = "/privacy"
+  to = "/privacy.html"
+  status = 200
+
+[[redirects]]
+  from = "/legal"
+  to = "/legal.html"
+  status = 200
+
+[[redirects]]
   from = "/pricing"
   to = "/dashboard.html#pricing"
   status = 200
