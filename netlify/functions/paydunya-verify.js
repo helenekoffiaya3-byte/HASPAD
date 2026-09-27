@@ -1,12 +1,12 @@
 import { authenticatedUser, admin, json } from "./_credits.js";
 import { paydunyaConfirm, applyAcceptedPayment } from "./_paydunya.js";
 
-export async function handler(event) {
-  if (event.httpMethod !== "POST") return json(405, { error: "METHOD_NOT_ALLOWED" });
+export default async function handler(req) {
+  if (req.method !== "POST") return json(405, { error: "METHOD_NOT_ALLOWED" });
   const user = await authenticatedUser(event);
   if (!user) return json(401, { error: "UNAUTHORIZED" });
   let body;
-  try { body = JSON.parse(event.body || "{}"); } catch { return json(400, { error: "INVALID_JSON" }); }
+  try { body = await req.json(); } catch { return json(400, { error: "INVALID_JSON" }); }
   const token = String(body.token || "");
   if (!token) return json(400, { error: "TOKEN_REQUIRED" });
   try {
