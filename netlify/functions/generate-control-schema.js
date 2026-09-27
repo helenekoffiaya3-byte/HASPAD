@@ -10,7 +10,7 @@ function validateBlueprint(x){
 export default async(req)=>{
  if(req.method!=="POST")return json(405,{error:"Method Not Allowed"});
  const user=await authenticatedUser(req);if(!user)return json(401,{error:"Unauthorized"});
- let body;try{body=JSON.parse(req.body||"{}")}catch{return json(400,{error:"JSON invalide."})}
+ let body;try{body=await req.json()}catch{return json(400,{error:"JSON invalide."})}
  const {site_id,prompt}=body;if(!site_id||!prompt||String(prompt).length>6000)return json(400,{error:"site_id et prompt requis."});
  const {data:member}=await admin.from("sites").select("id").eq("id",site_id).eq("user_id",user.id).maybeSingle();if(!member)return json(403,{error:"Accès refusé."});
  const {data:sub}=await admin.from("subscriptions").select("status").eq("user_id",user.id).eq("plan_name","startup").eq("status","active").limit(1).maybeSingle();if(!sub)return json(402,{error:"Le plan Startup actif est requis."});
