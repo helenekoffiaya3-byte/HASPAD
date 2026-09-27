@@ -19,7 +19,9 @@
     "passport-google-oauth20": "^2.0.0",
     "passport-github2": "^1.2.0",
     "passport-gitlab2": "^5.0.0",
-    "passport-bitbucket-oauth2": "^1.2.0"
+    "passport-bitbucket-oauth2": "^1.2.0",
+    "@supabase/supabase-js": "^2.117.2",
+    "zod": "^4.6.5"
   },
   "engines": {
     "node": ">=20"
