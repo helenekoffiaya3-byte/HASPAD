@@ -3,8 +3,8 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "dev": "netlify dev",
-    "start": "netlify dev",
+    "dev": "npx netlify dev",
+    "start": "npx netlify dev",
     "build": "node -e \"console.log('HASPAD: Netlify static build; no compile step required')\""
   },
   "dependencies": {
