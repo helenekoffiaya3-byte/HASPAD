@@ -33,7 +33,7 @@ async function buildImage(body,tag){
   await new Promise((resolve,reject)=>docker.modem.followProgress(build,(err)=>err?reject(err):resolve()));
  }finally{await fs.rm(dir,{recursive:true,force:true}).catch(()=>{})}
 }
-function labels(name,host,port){const r=clean(name);return {"traefik.enable":"true",["traefik.http.routers."+r+".rule"]:"Host(`"+host+"`)",["traefik.http.routers."+r+".entrypoints"]:"web",["traefik.http.services."+r+".loadbalancer.server.port"]:String(port)}}
+function labels(name,host,port){const r=clean(name);return {"traefik.enable":"true",["traefik.http.routers."+r+".rule"]:"Host(`"+host+"`)",["traefik.http.routers."+r+".entrypoints"]:"websecure",["traefik.http.routers."+r+".tls"]:"true",["traefik.http.routers."+r+".tls.certresolver"]:"le",["traefik.http.services."+r+".loadbalancer.server.port"]:String(port)}}
 async function removeExisting(name){try{const c=docker.getContainer(name);await c.inspect();await c.remove({force:true})}catch{}}
 export async function deploy(body){
  const runtimeId=clean(body.runtimeId||crypto.randomUUID(),80),name="haspad-"+runtimeId,port=Math.max(1,Math.min(65535,Number(body.port||3000))),host=required(body,"host"),tag="haspad/"+clean(body.projectId||runtimeId,50)+":"+clean(body.commitSha||Date.now(),60);
