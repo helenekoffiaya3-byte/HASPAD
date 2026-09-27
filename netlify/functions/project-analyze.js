@@ -1,6 +1,7 @@
 import { getUser } from "@netlify/identity";
 import { admin, json } from "./_credits.js";
 import { githubConnection } from "./_github.js";
+import { deploymentTarget } from "./_deployment-router.js";
 const env=n=>globalThis.Netlify?.env?.get?.(n)??process.env[n],api="https://api.github.com";
 const gh=async(p,t)=>{const r=await fetch(api+p,{headers:{authorization:"Bearer "+t,accept:"application/vnd.github+json","x-github-api-version":env("GITHUB_API_VERSION")||"2022-11-28"}});const d=await r.json().catch(()=>({}));if(!r.ok)throw Error(d.message||"GITHUB_API_ERROR");return d};
 function analyze(names,c){
@@ -11,7 +12,8 @@ function analyze(names,c){
  else if(has("requirements.txt")||has("pyproject.toml")){runtime="python";const s=(c["requirements.txt"]||"")+"\n"+(c["pyproject.toml"]||"");if(/fastapi/i.test(s))framework="fastapi";else if(/django/i.test(s))framework="django";else if(/flask/i.test(s))framework="flask"}
  else if(has("go.mod"))runtime="go";else if(has("composer.json"))runtime="php";else if(has("index.html"))runtime="static";
  const es={};for(const line of (c[".env.example"]||"").split(/\r?\n/)){const m=line.match(/^([A-Za-z_][A-Za-z0-9_]*)\s*(?:=|$)/);if(m)es[m[1]]={required:false}};
- return {runtime,framework,dockerfilePath,port,buildCommand,startCommand,publishDirectory,detectedFiles:names,environmentSchema:es,runtimeTarget:runtime==="static"?"netlify":"docker"};
+ const routing=deploymentTarget({runtime,framework,detectedFiles:names,publishDirectory});
+ return {runtime,framework,dockerfilePath,port,buildCommand,startCommand,publishDirectory,detectedFiles:names,environmentSchema:es,runtimeTarget:routing.target,provider:routing.provider,routingReason:routing.reason};
 }
 export default async req=>{
  if(req.method!=="POST")return json(405,{error:"Method Not Allowed"});const user=await getUser();if(!user)return json(401,{error:"Unauthorized"});
