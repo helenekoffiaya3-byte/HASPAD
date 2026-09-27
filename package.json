@@ -20,5 +20,8 @@
     "passport-github2": "^1.2.0",
     "passport-gitlab2": "^5.0.0",
     "passport-bitbucket-oauth2": "^1.2.0"
+  },
+  "engines": {
+    "node": ">=20"
   }
 }
