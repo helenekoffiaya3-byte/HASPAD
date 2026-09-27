@@ -1,5 +1,5 @@
 import {admin,json,authenticatedUser} from "./_credits.js";
-const MODEL=process.env.GEMINI_MODEL||"gemini-3.8-flash";
+const MODEL=process.env.GEMINI_MODEL||"gemini-3.1-pro-preview";
 const TYPES=new Set(["text","integer","numeric","boolean","uuid","timestamptz","jsonb"]);
 function extract(text){const cleaned=String(text||"").replace(/^\s*\`\`\`json\s*/i,"").replace(/\s*\`\`\`\s*$/,"").trim();return JSON.parse(cleaned);}
 function validateBlueprint(x){
@@ -19,5 +19,5 @@ export default async(req)=>{
  const response=await fetch("https://generativelanguage.googleapis.com/v1beta/models/"+encodeURIComponent(MODEL)+":generateContent",{method:"POST",headers:{"x-goog-api-key":process.env.GEMINI_API_KEY,"content-type":"application/json"},body:JSON.stringify({system_instruction:{parts:[{text:system}]},contents:[{parts:[{text:String(prompt)}]}]})});
  if(!response.ok)return json(502,{error:"Gemini indisponible."});
  const raw=await response.json();const text=raw?.candidates?.[0]?.content?.parts?.map(p=>p.text||"").join("")||"";
- try{const blueprint=validateBlueprint(extract(text));const {data,error}=await admin.from("control_schema_requests").insert({site_id,user_id:user.id,request_text:String(prompt),schema_blueprint:blueprint,status:"applied"}).select("id,created_at").single();if(error)throw error;await admin.from("ai_activity_logs").insert({site_id,agent_name:"Architect",action_taken:"control_schema_blueprint",details:{requestId:data.id,tableCount:blueprint.tables.length}});return json(200,{ok:true,requestId:data.id,blueprint});}catch(e){return json(422,{error:"Le blueprint Gemini ne respecte pas le périmètre HASPAD."});}
+ try{const blueprint=validateBlueprint(extract(text));const {data,error}=await admin.from("control_schema_requests").insert({site_id,user_id:user.id,request_text:String(prompt),schema_blueprint:blueprint,status:"proposed"}).select("id,created_at").single();if(error)throw error;await admin.from("ai_activity_logs").insert({site_id,agent_name:"Architect",action_taken:"control_schema_blueprint",details:{requestId:data.id,tableCount:blueprint.tables.length}});return json(200,{ok:true,requestId:data.id,blueprint});}catch(e){return json(422,{error:"Le blueprint Gemini ne respecte pas le périmètre HASPAD."});}
 };
