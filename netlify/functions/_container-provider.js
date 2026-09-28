@@ -26,28 +26,50 @@ async function cf(path,options={}){
   return data?.result??data;
 }
 
+async function resolveWorker(){
+  const workerName=required("CLOUDFLARE_CONTAINER_WORKER_NAME");
+  const workers=await cf("/workers/scripts",{method:"GET"});
+  const list=Array.isArray(workers)?workers:[];
+  const worker=list.find(x=>x?.id===workerName||x?.name===workerName);
+  if(!worker?.tag)throw new Error("CLOUDFLARE_WORKER_NOT_FOUND:"+workerName);
+  return {name:worker.id||worker.name,tag:worker.tag};
+}
+
+async function resolveTrigger(workerTag){
+  const triggers=await cf("/builds/workers/"+encodeURIComponent(workerTag)+"/triggers",{method:"GET"});
+  const list=Array.isArray(triggers)?triggers:[];
+  const requested=env("CLOUDFLARE_BUILD_TRIGGER_NAME");
+  const production=list.find(x=>x?.branch_includes?.includes("main")&&(!requested||x.trigger_name===requested));
+  const fallback=list.find(x=>!requested||x.trigger_name===requested)||list[0];
+  const trigger=production||fallback;
+  if(!trigger?.trigger_uuid)throw new Error("CLOUDFLARE_BUILD_TRIGGER_NOT_FOUND");
+  return trigger;
+}
+
 export function containerProviderStatus(){
   const configured=Boolean(
     env("CLOUDFLARE_ACCOUNT_ID")&&
-    env("CLOUDFLARE_API_TOKEN")
+    env("CLOUDFLARE_API_TOKEN")&&
+    env("CLOUDFLARE_CONTAINER_WORKER_NAME")
   );
   return {
     configured,
     provider:"cloudflare-containers",
-    mode:"workers-builds"
+    mode:"workers-builds",
+    workerName:env("CLOUDFLARE_CONTAINER_WORKER_NAME")||null
   };
 }
 
 export async function deployContainer(input={}){
-  const triggerUuid=input.cloudflareTriggerUuid||env("CLOUDFLARE_BUILD_TRIGGER_UUID");
-  if(!triggerUuid)throw new Error("CLOUDFLARE_BUILD_TRIGGER_UUID_NOT_CONFIGURED");
+  const worker=await resolveWorker();
+  const trigger=await resolveTrigger(worker.tag);
 
   const payload={};
   if(input.branch)payload.branch=String(input.branch);
   if(input.commitSha)payload.commit_hash=String(input.commitSha);
   if(!payload.branch&&!payload.commit_hash)payload.branch="main";
 
-  const build=await cf("/builds/triggers/"+encodeURIComponent(triggerUuid)+"/builds",{
+  const build=await cf("/builds/triggers/"+encodeURIComponent(trigger.trigger_uuid)+"/builds",{
     method:"POST",
     body:JSON.stringify(payload)
   });
@@ -55,6 +77,8 @@ export async function deployContainer(input={}){
   return {
     provider:"cloudflare-containers",
     mode:"workers-builds",
+    worker:{name:worker.name,tag:worker.tag},
+    trigger:{uuid:trigger.trigger_uuid,name:trigger.trigger_name||null},
     buildUuid:build?.build_uuid||build?.uuid||null,
     status:build?.status||"queued",
     publicUrl:build?.preview_url||build?.url||null,
