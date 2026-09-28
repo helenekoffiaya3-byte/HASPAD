@@ -19,13 +19,12 @@
       }
     ]
   },
-  "exports": {
-    "HasPadContainer": {
-      "type": "durable-object",
-      "storage": "sqlite",
-      "container": "HasPadContainer"
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["HasPadContainer"]
     }
-  },
+  ],
   "observability": {
     "enabled": true
   }
