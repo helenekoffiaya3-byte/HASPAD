@@ -1,9 +1,13 @@
 {
-  "name": "haspad-runtime-container",
+  "name": "haspad-runtime-cloudflare",
   "version": "1.0.0",
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "node server.js"
+    "deploy": "wrangler deploy",
+    "dev": "wrangler dev"
+  },
+  "devDependencies": {
+    "wrangler": "4.142.0"
   }
 }
