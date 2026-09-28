@@ -31,19 +31,9 @@ async function resolveWorker(){
   const workers=await cf("/workers/scripts",{method:"GET"});
   const list=Array.isArray(workers)?workers:[];
   const worker=list.find(x=>x?.id===workerName||x?.name===workerName);
-  if(!worker?.tag)throw new Error("CLOUDFLARE_WORKER_NOT_FOUND:"+workerName);
-  return {name:worker.id||worker.name,tag:worker.tag};
-}
-
-async function resolveTrigger(workerTag){
-  const triggers=await cf("/builds/workers/"+encodeURIComponent(workerTag)+"/triggers",{method:"GET"});
-  const list=Array.isArray(triggers)?triggers:[];
-  const requested=env("CLOUDFLARE_BUILD_TRIGGER_NAME");
-  const production=list.find(x=>x?.branch_includes?.includes("main")&&(!requested||x.trigger_name===requested));
-  const fallback=list.find(x=>!requested||x.trigger_name===requested)||list[0];
-  const trigger=production||fallback;
-  if(!trigger?.trigger_uuid)throw new Error("CLOUDFLARE_BUILD_TRIGGER_NOT_FOUND");
-  return trigger;
+  const tag=worker?.external_script_id||worker?.tag;
+  if(!worker||!tag)throw new Error("CLOUDFLARE_WORKER_NOT_FOUND:"+workerName);
+  return {name:worker.id||worker.name,tag};
 }
 
 export function containerProviderStatus(){
@@ -55,33 +45,19 @@ export function containerProviderStatus(){
   return {
     configured,
     provider:"cloudflare-containers",
-    mode:"workers-builds",
+    mode:"worker-container",
     workerName:env("CLOUDFLARE_CONTAINER_WORKER_NAME")||null
   };
 }
 
 export async function deployContainer(input={}){
   const worker=await resolveWorker();
-  const trigger=await resolveTrigger(worker.tag);
-
-  const payload={};
-  if(input.branch)payload.branch=String(input.branch);
-  if(input.commitSha)payload.commit_hash=String(input.commitSha);
-  if(!payload.branch&&!payload.commit_hash)payload.branch="main";
-
-  const build=await cf("/builds/triggers/"+encodeURIComponent(trigger.trigger_uuid)+"/builds",{
-    method:"POST",
-    body:JSON.stringify(payload)
-  });
-
   return {
     provider:"cloudflare-containers",
-    mode:"workers-builds",
+    mode:"worker-container",
     worker:{name:worker.name,tag:worker.tag},
-    trigger:{uuid:trigger.trigger_uuid,name:trigger.trigger_name||null},
-    buildUuid:build?.build_uuid||build?.uuid||null,
-    status:build?.status||"queued",
-    publicUrl:build?.preview_url||build?.url||null,
+    status:"managed-by-workers-builds",
+    publicUrl:"https://"+worker.name+".workers.dev",
     repository:{
       provider:input.repositoryProvider||"github",
       owner:input.repositoryOwner,
