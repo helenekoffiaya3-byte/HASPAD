@@ -108,13 +108,21 @@ export default async req=>{
 
     const publicUrl=result.publicUrl||result.url||null;
     await admin.from("project_builds").update({
-      status:"success",
+      status:"queued",
       deploy_url:publicUrl,
       triggered_at:new Date().toISOString(),
       updated_at:new Date().toISOString()
     }).eq("id",buildId);
 
-    return json(201,{success:true,buildId,runtime:result,runtimeTarget:routing.target,provider:provider.provider});
+    return json(202,{
+      success:true,
+      buildId,
+      status:"queued",
+      runtime:result,
+      runtimeTarget:routing.target,
+      provider:provider.provider,
+      message:"Le Worker Cloudflare Containers est configuré. Le déploiement applicatif est piloté par Workers Builds sur le dépôt connecté au Worker."
+    });
   }catch(e){
     await admin.rpc("fail_build_and_refund",{
       p_build_id:buildId,
