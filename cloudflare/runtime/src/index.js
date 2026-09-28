@@ -1,4 +1,4 @@
-import { Container } from "cloudflare:containers";
+import { Container } from "@cloudflare/containers";
 
 export class HasPadContainer extends Container {
   defaultPort = 3000;
