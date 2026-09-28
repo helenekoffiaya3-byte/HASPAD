@@ -1,0 +1,31 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "haspad-runtime",
+  "main": "src/index.js",
+  "compatibility_date": "2026-09-26",
+  "containers": [
+    {
+      "class_name": "HasPadContainer",
+      "image": "./Dockerfile",
+      "instance_type": "lite",
+      "max_instances": 20
+    }
+  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "HASPAD_CONTAINER",
+        "class_name": "HasPadContainer"
+      }
+    ]
+  },
+  "exports": {
+    "HasPadContainer": {
+      "type": "durable-object",
+      "storage": "sqlite"
+    }
+  },
+  "observability": {
+    "enabled": true
+  }
+}
