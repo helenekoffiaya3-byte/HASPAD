@@ -5,7 +5,9 @@
   "scripts": {
     "dev": "npx netlify dev",
     "start": "npx netlify dev",
-    "build": "node -e \"console.log('HASPAD: Netlify static build; no compile step required')\""
+    "build": "node -e \"console.log('HASPAD: Netlify static build; no compile step required')\"",
+    "cloudflare:deploy": "wrangler deploy",
+    "cloudflare:dev": "wrangler dev"
   },
   "dependencies": {
     "@google/genai": "^2.24.0",
@@ -26,5 +28,8 @@
   },
   "engines": {
     "node": ">=20"
+  },
+  "devDependencies": {
+    "wrangler": "4.142.0"
   }
 }
