@@ -32,6 +32,11 @@ async function buildImage(body,tag){
  }finally{await fs.rm(dir,{recursive:true,force:true}).catch(()=>{})}
 }
 function labels(project,host,port,suffix){const r=clean(project,60)+"-"+clean(suffix,20);return {"haspad.project":clean(project,80),"haspad.runtime":r,"traefik.enable":"true",["traefik.http.routers."+r+".rule"]:"Host(`"+host+"`)",["traefik.http.routers."+r+".entrypoints"]:"websecure",["traefik.http.routers."+r+".tls"]:"true",["traefik.http.routers."+r+".tls.certresolver"]:"le",["traefik.http.services."+r+".loadbalancer.server.port"]:String(port)}}
+async function ensureNetwork(name){
+ try{return docker.getNetwork(name)}catch{}
+ const n=await docker.createNetwork({Name:name,Driver:"bridge",Labels:{"haspad.managed":"true"}});
+ return docker.getNetwork(n.id);
+}
 async function projectContainers(project){const a=await docker.listContainers({all:true,filters:{label:["haspad.project="+clean(project,80)]}});return a.map(x=>docker.getContainer(x.Id))}
 async function waitReady(c,port,pathName="/",timeoutMs=60000){
  const deadline=Date.now()+timeoutMs;let last="";
@@ -53,15 +58,17 @@ async function pushRegistry(tag){
 export async function deploy(body){
  const projectId=required(body,"projectId"),runtimeId=clean(body.runtimeId||crypto.randomUUID(),80),port=Math.max(1,Math.min(65535,Number(body.port||3000))),host=required(body,"host"),tag="haspad/"+clean(projectId,50)+":"+clean(body.commitSha||runtimeId,60),network=process.env.DOCKER_NETWORK||"haspad-runtime";
  jobs.set(runtimeId,{status:"building",projectId});
+ let createdContainer=null;
  try{
+  await ensureNetwork(network);
   await buildImage(body,tag);const registry=await pushRegistry(tag);
-  const name="haspad-"+clean(runtimeId,80),c=await docker.createContainer({name,Image:tag,Env:envPairs(body.env),ExposedPorts:{[port+"/tcp"]:{}},Labels:labels(projectId,host,port,runtimeId),User:body.containerUser||"1000:1000",
+  const name="haspad-"+clean(runtimeId,80),c=await docker.createContainer({name,Image:tag,Env:envPairs(body.env),ExposedPorts:{[port+"/tcp"]:{}},Labels:labels(projectId,host,port,runtimeId),User:"1000:1000",
    HostConfig:{NetworkMode:network,Memory:Number(body.memoryBytes||536870912),NanoCpus:Number(body.nanoCpus||1000000000),PidsLimit:Number(body.pidsLimit||256),ReadonlyRootfs:body.readonlyRootfs!==false,Tmpfs:{"/tmp":"rw,noexec,nosuid,size=256m"},SecurityOpt:["no-new-privileges:true"],CapDrop:["ALL"],RestartPolicy:{Name:"unless-stopped"},AutoRemove:false}});
-  await c.start();const ready=await waitReady(c,port,body.healthcheckPath||"/");
+  createdContainer=c; await c.start();const ready=await waitReady(c,port,body.healthcheckPath||"/");
   const old=(await projectContainers(projectId)).filter(x=>x.id!==c.id);for(const oc of old)await oc.remove({force:true}).catch(()=>{});
   const ii=await docker.getImage(tag).inspect();jobs.set(runtimeId,{status:"running",projectId,containerId:c.id,image:tag,startedAt:new Date().toISOString(),host});
   return {success:true,runtimeId,containerId:c.id,image:tag,digest:ii.Id,publicUrl:"https://"+host,health:ready.status,registry};
- }catch(e){jobs.set(runtimeId,{status:"failed",projectId,error:String(e?.message||e)});throw e}finally{body.githubToken=""}
+ }catch(e){if(createdContainer)await createdContainer.remove({force:true}).catch(()=>{});jobs.set(runtimeId,{status:"failed",projectId,error:String(e?.message||e)});throw e}finally{body.githubToken=""}
 }
 export async function getRuntimeStatus(id){const j=jobs.get(clean(id,80));if(!j?.containerId)return j||{status:"unknown"};try{const i=await docker.getContainer(j.containerId).inspect();return {...j,status:i.State?.Status||j.status,health:i.State?.Health?.Status||null,restarts:i.RestartCount}}catch{return {...j,status:"gone"}}}
 export async function getLogs(id){const j=jobs.get(clean(id,80));if(!j?.containerId)throw Error("RUNTIME_NOT_FOUND");const b=await docker.getContainer(j.containerId).logs({stdout:true,stderr:true,tail:500,timestamps:true});return {runtimeId:id,logs:b.toString("utf8").slice(-100000)}}
