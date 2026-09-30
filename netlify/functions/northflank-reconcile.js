@@ -1,4 +1,4 @@
-import { admin, json } from "./_credits.js";
+import { admin } from "./_credits.js";
 import { runtimeRequest } from "./_runtime.js";
 
 export default async () => {
