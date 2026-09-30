@@ -88,8 +88,13 @@ export default async req=>{
         });
         const refreshed=await admin.from("project_builds").select("*").eq("id",id).maybeSingle();
         if(refreshed.data)build=refreshed.data;
-      }else if(["ready","running","healthy","active"].includes(runtimeState) && build.status==="pending"){
-        await admin.from("project_builds").update({status:"building",updated_at:new Date().toISOString()}).eq("id",id).eq("status","pending");
+      }else if(["ready","running","healthy","active"].includes(runtimeState)){
+        await admin.from("project_builds").update({
+          status:"success",
+          deploy_url:runtime?.publicUrl||runtime?.url||build.deploy_url||null,
+          error_message:null,
+          updated_at:new Date().toISOString()
+        }).eq("id",id).neq("status","failed");
         const refreshed=await admin.from("project_builds").select("*").eq("id",id).maybeSingle();
         if(refreshed.data)build=refreshed.data;
       }
