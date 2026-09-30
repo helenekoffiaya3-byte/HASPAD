@@ -63,7 +63,8 @@ async function loadFrontendSnapshot(userId, owner, name, branch) {
   }
   return snapshot;
 }
-\nasync function runThreeAgents({ user, buildId, siteId, owner, name, branch, command }) {
+
+async function runThreeAgents({ user, buildId, siteId, owner, name, branch, command }) {
   const geminiKey = env("GEMINI_API_KEY");
   if (!geminiKey) throw new Error("GEMINI_GATEWAY_NOT_READY");
 
