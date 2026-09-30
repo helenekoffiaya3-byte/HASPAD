@@ -7,7 +7,7 @@ import { githubConnection, pushFiles } from "./_github.js";
 
 const env = (name) => globalThis.Netlify?.env?.get?.(name) ?? process.env[name];
 const UUID = /^[0-9a-f-]{36}$/i;
-const SAFE_COMMAND = /^[A-Za-z0-9_./:@%+?=,-]+(?:\s+[A-Za-z0-9_./:@%+?=,-]+)*$/;
+const SAFE_COMMAND = /^[A-Za-z0-9_./:@%+?=,-]+(?:\s+[A-Za-z0-9_./:@%+?=,-]+)*$/;\nconst ACTIVE_BUILD_STATES = new Set(["pending", "building", "queued", "processing"]);
 
 async function netlify(url, options = {}) {
   const token = env("NETLIFY_AUTH_TOKEN");
@@ -64,7 +64,7 @@ async function loadFrontendSnapshot(userId, owner, name, branch) {
   return snapshot;
 }
 
-async function runThreeAgents({ user, buildId, siteId, owner, name, branch, command }) {
+async function ensureDeployFailureHook(siteId) {\n  const secret = env("NETLIFY_WEBHOOK_SECRET");\n  if (!secret) throw new Error("NETLIFY_WEBHOOK_SECRET_NOT_CONFIGURED");\n  const hookUrl = env("PUBLIC_SITE_URL") + "/api/netlify-deploy-hook?token=" + encodeURIComponent(secret);\n  const hooks = await netlify("https://api.netlify.com/api/v1/hooks?site_id=" + encodeURIComponent(siteId));\n  const existing = Array.isArray(hooks) ? hooks.find(h => h?.type === "url" && h?.event === "deploy_failed" && h?.data?.url === hookUrl) : null;\n  if (existing && !existing.disabled) return existing.id;\n  const created = await netlify("https://api.netlify.com/api/v1/hooks", { method: "POST", body: JSON.stringify({ site_id: siteId, type: "url", event: "deploy_failed", data: { url: hookUrl } }) });\n  return created?.id || null;\n}\n\nasync function runThreeAgents({ user, buildId, siteId, owner, name, branch, command }) {
   const geminiKey = env("GEMINI_API_KEY");
   if (!geminiKey) throw new Error("GEMINI_GATEWAY_NOT_READY");
 
@@ -84,7 +84,7 @@ async function runThreeAgents({ user, buildId, siteId, owner, name, branch, comm
 
   const frontendFiles = gemini.files || {};
   if (Object.keys(frontendFiles).length) {
-    await pushFiles(user.id, owner, name, branch, frontendFiles, "feat(haspad): Gemini builds all frontend pages");
+    await pushFiles(user.id, owner, name, branch, frontendFiles, "feat(haspad): Gemini builds all frontend pages [skip netlify]");
   }
 
   await admin.from("ai_activity_logs").insert({
@@ -120,7 +120,7 @@ async function runThreeAgents({ user, buildId, siteId, owner, name, branch, comm
     if (!p || p.startsWith("/") || p.includes("..") || p.includes("\\") || p.includes(".env")) throw new Error("INVALID_CLAUDE_PATH");
   }
   if (Object.keys(files).length) {
-    await pushFiles(user.id, owner, name, branch, files, "chore(haspad): apply Claude backend before deployment");
+    await pushFiles(user.id, owner, name, branch, files, "chore(haspad): apply Claude backend before deployment [skip netlify]");
   }
   await admin.from("ai_activity_logs").insert({
     site_id: siteId, agent_name: "claude-backend-builder", action_taken: "DEPLOYMENT_BACKEND_GENERATION",
@@ -140,7 +140,7 @@ async function runThreeAgents({ user, buildId, siteId, owner, name, branch, comm
   });
   if (!chatResponse.ok) throw new Error("OPENAI_GATEWAY_ERROR");
   const chatData = await chatResponse.json();
-  const chatgpt = JSON.parse(String(chatData.output_text || "").replace(/^\`\`\`json\s*/i, "").replace(/\s*\`\`\`$/i, ""));
+  const chatgpt = JSON.parse(String(chatData.output_text || "").replace(/^\`\`\`(?:json)?\s*/i, "").replace(/\s*\`\`\`$/i, ""));
   await admin.from("ai_activity_logs").insert({
     site_id: siteId, agent_name: "chatgpt-integration", action_taken: "DEPLOYMENT_FINAL_GATE",
     details: { build_id: buildId, model: env("CHATGPT_MODEL") || "gpt-5.6-luna", status: chatgpt.status }
@@ -183,7 +183,7 @@ export default async (req) => {
 
   const buildId = allocation.build_id;
   try {
-    const agents = await runThreeAgents({ user, buildId, siteId, owner, name, branch, command });
+    const agents = await runThreeAgents({ user, buildId, siteId, owner, name, branch, command });\n    await ensureDeployFailureHook(site.netlify_site_id);
     const current = await netlify("https://api.netlify.com/api/v1/sites/" + encodeURIComponent(site.netlify_site_id));
     const existing = current.build_settings || current.repo || {};
     const repoPath = owner + "/" + name;
@@ -195,7 +195,7 @@ export default async (req) => {
       repo_url: repoUrl,
       repo_branch: branch,
       cmd: command,
-      dir: publishDirectory || existing.dir || "",
+      base: baseDirectory || existing.base || "",\n      dir: publishDirectory || existing.dir || "",
       allowed_branches: Array.from(new Set([...(existing.allowed_branches || []), branch]))
     };
 
