@@ -147,6 +147,8 @@ Rules:
     const blockers = [];
     const dockerfile = String(contents["Dockerfile"] || "");
     const compose = String(contents["docker-compose.yml"] || contents["docker-compose.yaml"] || "");
+    if (targetRuntime === "docker" && !env("HASPAD_RUNTIME_URL")) blockers.push("La cible Docker n'est pas configurée: HASPAD_RUNTIME_URL est manquante.");
+    if (targetRuntime === "docker" && !env("HASPAD_RUNTIME_SHARED_SECRET")) blockers.push("La cible Docker n'est pas sécurisée: HASPAD_RUNTIME_SHARED_SECRET est manquante.");
     if (targetRuntime === "docker") {
       if (!rootFiles.has("Dockerfile")) blockers.push("HASPAD Docker Runtime utilise un Dockerfile contrôlé; un compose seul n'est pas exécutable par cette cible.");
       const dangerous = [
