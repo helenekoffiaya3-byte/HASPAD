@@ -65,161 +65,28 @@ async function loadFrontendSnapshot(userId, owner, name, branch) {
   return snapshot;
 }
 
-async function ensureDeployFailureHook(siteId) {\n  const secret = env("NETLIFY_WEBHOOK_SECRET");\n  if (!secret) throw new Error("NETLIFY_WEBHOOK_SECRET_NOT_CONFIGURED");\n  const hookUrl = env("PUBLIC_SITE_URL") + "/api/netlify-deploy-hook?token=" + encodeURIComponent(secret);\n  try {
-    const hooks = await netlify("https://api.netlify.com/api/v1/hooks?site_id=" + encodeURIComponent(siteId));\n  const existing = Array.isArray(hooks) ? hooks.find(h => h?.type === "url" && h?.event === "deploy_failed" && h?.data?.url === hookUrl) : null;\n  if (existing && !existing.disabled) return existing.id;\n  const created = await netlify("https://api.netlify.com/api/v1/hooks", { method: "POST", body: JSON.stringify({ site_id: siteId, type: "url", event: "deploy_failed", data: { url: hookUrl } }) });\n  return created?.id || null;\n}\n\nasync function runThreeAgents({ user, buildId, siteId, owner, name, branch, command }) {
-  const geminiKey = env("GEMINI_API_KEY");
-  if (!geminiKey) throw new Error("GEMINI_GATEWAY_NOT_READY");
-
-  const [{ data: pages }, { data: components }] = await Promise.all([
-    admin.from("pages").select("slug,root_block,seo").eq("site_id", siteId).limit(100),
-    admin.from("site_components").select("page_id,component_type,identifier,design_props,position_index").eq("site_id", siteId).limit(500)
-  ]);
-
-  const snapshot = await loadFrontendSnapshot(user.id, owner, name, branch);
-  const gemini = await generateFrontendFiles({
-    repository: owner + "/" + name,
-    branch,
-    snapshot,
-    databaseSchema: { pages: pages || [], components: components || [] }
-  });
-  if (!gemini.success) throw new Error(gemini.error || "GEMINI_FRONTEND_BUILD_FAILED");
-
-  const frontendFiles = gemini.files || {};
-  if (Object.keys(frontendFiles).length) {
-    await pushFiles(user.id, owner, name, branch, frontendFiles, "feat(haspad): Gemini builds all frontend pages [skip netlify]");
-  }
-
-  await admin.from("ai_activity_logs").insert({
-    site_id: siteId, agent_name: "gemini-frontend", action_taken: "DEPLOYMENT_FRONTEND_BUILD",
-    details: {
-      build_id: buildId,
-      model: gemini.model,
-      status: "PASS",
-      page_count: Array.isArray(gemini.pages) ? gemini.pages.length : 0,
-      file_count: Object.keys(frontendFiles).length
-    }
-  });
-
-  const anthropicKey = env("ANTHROPIC_API_KEY");
-  const anthropicBase = env("ANTHROPIC_BASE_URL");
-  if (!anthropicKey || !anthropicBase) throw new Error("CLAUDE_GATEWAY_NOT_READY");
-  const claudeClient = new Anthropic({ apiKey: anthropicKey, baseURL: anthropicBase });
-  const claudeResponse = await claudeClient.messages.create({
-    model: env("CLAUDE_MODEL") || "claude-sonnet-5-5",
-    max_tokens: 12000,
-    system: "Tu es Claude, agent Backend HASPAD. Génère le backend nécessaire à l'application. Retourne UNIQUEMENT JSON: {projectType,framework,files:[{path,content}],env:[{key,required,secret,description}],endpoints:[{method,path,description}],tests:[{path,content}],notes:[string]}. Aucun secret, aucun chemin absolu, aucun code destructif. Le résultat sera écrit dans le dépôt avant le contrôle final.",
-    messages: [{ role: "user", content: JSON.stringify({
-      buildId, repository: owner + "/" + name, branch, command,
-      frontendBlueprint: gemini.blueprint || null,
-      instruction: "Construis ou complète uniquement le backend nécessaire pour rendre le projet déployable et connecté."
-    }) }]
-  });
-  const claudeRaw = claudeResponse.content.filter(p => p.type === "text").map(p => p.text).join("\n").trim();
-  const claude = JSON.parse(claudeRaw.replace(/^\`\`\`(?:json)?\s*/i, "").replace(/\s*\`\`\`$/i, ""));
-  if (!Array.isArray(claude.files) || claude.files.length > 80) throw new Error("INVALID_CLAUDE_MANIFEST");
-  const files = Object.fromEntries(claude.files.map(f => [String(f.path), String(f.content)]));
-  for (const p of Object.keys(files)) {
-    if (!p || p.startsWith("/") || p.includes("..") || p.includes("\\") || p.includes(".env")) throw new Error("INVALID_CLAUDE_PATH");
-  }
-  if (Object.keys(files).length) {
-    await pushFiles(user.id, owner, name, branch, files, "chore(haspad): apply Claude backend before deployment [skip netlify]");
-  }
-  await admin.from("ai_activity_logs").insert({
-    site_id: siteId, agent_name: "claude-backend-builder", action_taken: "DEPLOYMENT_BACKEND_GENERATION",
-    details: { build_id: buildId, model: env("CLAUDE_MODEL") || "claude-sonnet-5-5", file_count: Object.keys(files).length }
-  });
-
-  const openaiKey = env("OPENAI_API_KEY");
-  if (!openaiKey) throw new Error("OPENAI_GATEWAY_NOT_READY");
-  const chatResponse = await fetch(env("OPENAI_BASE_URL") || "https://api.openai.com/v1/responses", {
-    method: "POST",
-    headers: { "content-type": "application/json", authorization: "Bearer " + openaiKey },
-    body: JSON.stringify({
-      model: env("CHATGPT_MODEL") || "gpt-5.6-luna",
-      instructions: "Tu es ChatGPT, dernier agent d'intégration HASPAD. Vérifie que frontend, backend Claude, routes, API, variables et commande de build sont cohérents. Retourne UNIQUEMENT JSON: {status:'PASS'|'REPAIR_REQUIRED'|'BLOCKED',errors:[{file,message}],fixes:[{file,reason}],checks:[{name,result,evidence}],notes:[string]}. PASS seulement si le déploiement peut partir sans erreur d'intégration évidente.",
-      input: JSON.stringify({ siteId, repository: owner + "/" + name, branch, command, frontend: gemini, backend: claude })
-    })
-  });
-  if (!chatResponse.ok) throw new Error("OPENAI_GATEWAY_ERROR");
-  const chatData = await chatResponse.json();
-  const chatgpt = JSON.parse(String(chatData.output_text || "").replace(/^\`\`\`(?:json)?\s*/i, "").replace(/\s*\`\`\`$/i, ""));
-  await admin.from("ai_activity_logs").insert({
-    site_id: siteId, agent_name: "chatgpt-integration", action_taken: "DEPLOYMENT_FINAL_GATE",
-    details: { build_id: buildId, model: env("CHATGPT_MODEL") || "gpt-5.6-luna", status: chatgpt.status }
-  });
-  if (chatgpt.status !== "PASS") throw new Error("AI_GATE_" + chatgpt.status);
-  return { gemini: "PASS", claude: "BACKEND_READY", chatgpt: "PASS" };
-}
-
-export default async (req) => {
-  if (req.method !== "POST") return json(405, { error: "Method Not Allowed" });
-  const user = await getUser();
-  if (!user) return json(401, { error: "Unauthorized" });
-  const b = await req.json().catch(() => null);
-  const siteId = String(b?.siteId || "");
-  const owner = String(b?.repositoryOwner || "");
-  const name = String(b?.repositoryName || "");
-  const branch = String(b?.branch || "");
-  const command = String(b?.command || "").trim();
-  const baseDirectory = String(b?.baseDirectory || "");
-  const publishDirectory = String(b?.publishDirectory || "");
-  if (!UUID.test(siteId) || !/^[A-Za-z0-9_.-]{1,100}$/.test(owner) || !/^[A-Za-z0-9_.-]{1,100}$/.test(name) ||
-      !/^[A-Za-z0-9._/-]{1,255}$/.test(branch) || command.length > 300 || (command && !SAFE_COMMAND.test(command))) {
-    return json(400, { error: "Paramètres de déploiement invalides." });
-  }
-  const site = (await admin.from("sites").select("id,user_id,netlify_site_id").eq("id", siteId).maybeSingle()).data;
-  if (!site || String(site.user_id) !== String(user.id)) return json(403, { error: "Forbidden" });
-  if (!site.netlify_site_id) return json(503, { error: "Aucune cible Netlify n'est associée au projet." });
-
-  const cost = Math.max(1, Number(env("GIT_DEPLOY_CREDIT_COST") || 300));
-  const referenceId = crypto.randomUUID();
-  const allocationResult = await admin.rpc("consume_credits_and_create_build_v2", {
-    p_user_id: user.id, p_site_id: siteId, p_cost: cost, p_reference_id: referenceId,
-    p_git_provider: "github", p_repository_owner: owner, p_repository_name: name, p_branch: branch
-  });
-  if (allocationResult.error) return json(500, { error: "Transaction de déploiement impossible." });
-  const allocation = allocationResult.data;
-  if (!allocation?.success) return json(allocation.error === "INSUFFICIENT_CREDITS" ? 402 : 400, {
-    error: allocation.error, remainingCredits: allocation.remaining_credits
-  });
-
-  const buildId = allocation.build_id;
+async function ensureDeployFailureHook(siteId) {
+  const secret = env("NETLIFY_WEBHOOK_SECRET");
+  if (!secret) return null;
+  const hookUrl = env("PUBLIC_SITE_URL") + "/api/netlify-deploy-hook?token=" + encodeURIComponent(secret);
   try {
-    const agents = await runThreeAgents({ user, buildId, siteId, owner, name, branch, command });\n    await ensureDeployFailureHook(site.netlify_site_id);
-    const current = await netlify("https://api.netlify.com/api/v1/sites/" + encodeURIComponent(site.netlify_site_id));
-    const existing = current.build_settings || current.repo || {};
-    const repoPath = owner + "/" + name;
-    const repoUrl = "https://github.com/" + owner + "/" + name;
-    const buildSettings = {
-      ...(existing || {}),
-      provider: "github",
-      repo_path: repoPath,
-      repo_url: repoUrl,
-      repo_branch: branch,
-      cmd: command,
-      base: baseDirectory || existing.base || "",\n      dir: publishDirectory || existing.dir || "",
-      allowed_branches: Array.from(new Set([...(existing.allowed_branches || []), branch]))
-    };
-
-    await netlify("https://api.netlify.com/api/v1/sites/" + encodeURIComponent(site.netlify_site_id), {
-      method: "PATCH",
-      body: JSON.stringify({ build_settings: buildSettings, repo: buildSettings })
+    const hooks = await netlify("https://api.netlify.com/api/v1/hooks?site_id=" + encodeURIComponent(siteId));
+    const existing = Array.isArray(hooks)
+      ? hooks.find(h => h?.type === "url" && h?.event === "deploy_failed" && h?.data?.url === hookUrl)
+      : null;
+    if (existing && !existing.disabled) return existing.id;
+    const created = await netlify("https://api.netlify.com/api/v1/hooks", {
+      method: "POST",
+      body: JSON.stringify({
+        site_id: siteId,
+        type: "url",
+        event: "deploy_failed",
+        data: { url: hookUrl }
+      })
     });
-
-    const build = await netlify("https://api.netlify.com/api/v1/sites/" + encodeURIComponent(site.netlify_site_id) +
-      "/builds?branch=" + encodeURIComponent(branch) + "&title=" + encodeURIComponent("HASPAD " + owner + "/" + name), { method: "POST", body: JSON.stringify({}) });
-
-    await admin.from("project_builds").update({
-      status: "building",
-      triggered_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-      netlify_deploy_id: build.deploy_id || null
-    }).eq("id", buildId);
-
-    return json(202, { success: true, buildId, netlifyBuildId: build.id, netlifyDeployId: build.deploy_id || null, command, branch, agents });
+    return created?.id || null;
   } catch (error) {
-    await admin.rpc("fail_build_and_refund", { p_build_id: buildId, p_error: String(error?.message || "DEPLOYMENT_FAILED").slice(0, 1000) });
-    console.error("deployment-trigger", error?.message || error);
-    return json(502, { error: "Le déploiement a échoué. Les crédits ont été remboursés." });
+    console.warn("Netlify deploy-failure hook unavailable:", error?.message || error);
+    return null;
   }
-};
+}
