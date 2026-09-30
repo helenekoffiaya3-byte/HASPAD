@@ -90,3 +90,8 @@
   from = "/git"
   to = "/git.html"
   status = 200
+
+[[redirects]]
+  from = "/base-studio"
+  to = "/base-studio.html"
+  status = 200
