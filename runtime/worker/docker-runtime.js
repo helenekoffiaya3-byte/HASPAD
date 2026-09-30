@@ -33,7 +33,8 @@ async function buildImage(body,tag){
 }
 function labels(project,host,port,suffix){const r=clean(project,60)+"-"+clean(suffix,20);return {"haspad.project":clean(project,80),"haspad.runtime":r,"traefik.enable":"true",["traefik.http.routers."+r+".rule"]:"Host(`"+host+"`)",["traefik.http.routers."+r+".entrypoints"]:"websecure",["traefik.http.routers."+r+".tls"]:"true",["traefik.http.routers."+r+".tls.certresolver"]:"le",["traefik.http.services."+r+".loadbalancer.server.port"]:String(port)}}
 async function ensureNetwork(name){
- try{return docker.getNetwork(name)}catch{}
+ const existing=docker.getNetwork(name);
+ try{await existing.inspect();return existing}catch{}
  const n=await docker.createNetwork({Name:name,Driver:"bridge",Labels:{"haspad.managed":"true"}});
  return docker.getNetwork(n.id);
 }
