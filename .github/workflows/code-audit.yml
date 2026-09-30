@@ -5,6 +5,17 @@ on:
   pull_request:
     branches: [main]
 jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Probe Node syntax checker
+        run: |
+          node --version
+          printf 'const x = 1;\n' > /tmp/probe.mjs
+          node --check /tmp/probe.mjs
   syntax:
     strategy:
       fail-fast: false
