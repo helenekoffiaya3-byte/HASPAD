@@ -45,9 +45,9 @@ export default async (req) => {
     return json(404, { error: "BUILD_NOT_FOUND" });
   }
 
-  const apiKey = env("CHATGPT_API_KEY") || env("OPENAI_API_KEY");
+  const apiKey = env("OPENAI_API_KEY");
   const baseURL = env("OPENAI_BASE_URL");
-  if (!apiKey) return json(503, { error: "CHATGPT_GATEWAY_NOT_READY" });
+  if (!apiKey) return json(503, { error: "OPENAI_GATEWAY_NOT_READY" });
 
   const evidence = JSON.stringify({
     request: String(body.request || "").slice(0, 20000),
@@ -75,7 +75,7 @@ export default async (req) => {
 
     if (!response.ok) {
       console.error("chatgpt-integration", response.status);
-      return json(502, { error: "CHATGPT_AGENT_FAILED" });
+      return json(502, { error: "OPENAI_AGENT_FAILED" });
     }
 
     const data = await response.json();
@@ -93,7 +93,7 @@ export default async (req) => {
     return json(200, { success: true, agent: "chatgpt-integration", result: parsed });
   } catch (error) {
     console.error("chatgpt-integration", error?.message || error);
-    return json(422, { error: "CHATGPT_AGENT_FAILED" });
+    return json(422, { error: "OPENAI_AGENT_FAILED" });
   }
 };
 
