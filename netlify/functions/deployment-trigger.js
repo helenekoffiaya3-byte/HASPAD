@@ -9,6 +9,21 @@ const env = (name) => globalThis.Netlify?.env?.get?.(name) ?? process.env[name];
 const UUID = /^[0-9a-f-]{36}$/i;
 const SAFE_COMMAND = /^[A-Za-z0-9_./:@%+?=,-]+(?:\s+[A-Za-z0-9_./:@%+?=,-]+)*$/;
 const ACTIVE_BUILD_STATES = new Set(["pending", "building", "queued", "processing"]);
+const preflightSecret = () => env("GITHUB_OAUTH_STATE_SECRET") || env("NETLIFY_WEBHOOK_SECRET") || "";
+function verifyPreflight(token, expected) {
+  try {
+    const [enc,sig] = String(token||"").split(".");
+    if (!enc || !sig) return false;
+    const payload = Buffer.from(enc,"base64url").toString("utf8");
+    const actual = JSON.parse(payload);
+    if (Date.now()-Number(actual.t) > 10*60*1000) return false;
+    for (const k of ["u","s","o","n","b"]) if (String(actual[k]) !== String(expected[k])) return false;
+    for (const k of ["c","bd","pd"]) if (String(actual[k]||"") !== String(expected[k]||"")) return false;
+    const expectedSig = crypto.createHmac("sha256", preflightSecret()).update(payload).digest();
+    const providedSig = Buffer.from(sig,"base64url");
+    return expectedSig.length === providedSig.length && crypto.timingSafeEqual(expectedSig, providedSig);
+  } catch { return false; }
+}
 
 async function netlify(url, options = {}) {
   const token = env("NETLIFY_AUTH_TOKEN");
@@ -180,10 +195,15 @@ export default async (req) => {
   const command = String(b?.command || "").trim();
   const baseDirectory = String(b?.baseDirectory || "");
   const publishDirectory = String(b?.publishDirectory || "");
+  const preflightToken = String(b?.preflightToken || "");
 
   if (!UUID.test(siteId) || !/^[A-Za-z0-9_.-]{1,100}$/.test(owner) || !/^[A-Za-z0-9_.-]{1,100}$/.test(name) ||
       !/^[A-Za-z0-9._/-]{1,255}$/.test(branch) || command.length > 300 || (command && !SAFE_COMMAND.test(command))) {
     return json(400, { error: "Paramètres de déploiement invalides." });
+  }
+
+  if (!verifyPreflight(preflightToken, {u:user.id,s:siteId,o:owner,n:name,b:branch,c:command,bd:baseDirectory,pd:publishDirectory})) {
+    return json(412, { error: "PREFLIGHT_REQUIRED_OR_EXPIRED", message: "Une prévalidation réussie et récente est obligatoire avant tout débit." });
   }
 
   const site = (await admin.from("sites").select("id,user_id,netlify_site_id").eq("id", siteId).maybeSingle()).data;
