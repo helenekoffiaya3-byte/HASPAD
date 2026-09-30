@@ -2,7 +2,7 @@ import { getUser } from "@netlify/identity";
 import { admin, json } from "./_credits.js";
 import crypto from "crypto";
 import Anthropic from "@anthropic-ai/sdk";
-import { generateProjectBlueprint } from "./aiService.js";
+import { generateProjectBlueprint, generateFrontendFiles } from "./aiService.js";
 import { githubConnection, pushFiles } from "./_github.js";
 
 const env = (name) => globalThis.Netlify?.env?.get?.(name) ?? process.env[name];
@@ -21,7 +21,49 @@ async function netlify(url, options = {}) {
 }
 
 
-async function runThreeAgents({ user, buildId, siteId, owner, name, branch, command }) {
+
+async function githubRequest(path, token, options = {}) {
+  const response = await fetch("https://api.github.com" + path, {
+    ...options,
+    headers: {
+      accept: "application/vnd.github+json",
+      authorization: "Bearer " + token,
+      "x-github-api-version": env("GITHUB_API_VERSION") || "2022-11-28",
+      ...(options.headers || {})
+    }
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data?.message || data?.error_description || "GITHUB_API_ERROR");
+  return data;
+}
+
+async function loadFrontendSnapshot(userId, owner, name, branch) {
+  const connection = await githubConnection(userId);
+  if (!connection) throw new Error("GITHUB_NOT_CONNECTED");
+  const tree = await githubRequest(
+    "/repos/" + encodeURIComponent(owner) + "/" + encodeURIComponent(name) +
+    "/git/trees/" + encodeURIComponent(branch) + "?recursive=1",
+    connection.token
+  );
+  const entries = Array.isArray(tree.tree) ? tree.tree : [];
+  const allowed = /^(?:public\/)(?:[^/]+\/)*[^/]+\.(?:html|css|js|mjs|json|svg)$/i;
+  const files = entries
+    .filter(x => x.type === "blob" && allowed.test(String(x.path || "")))
+    .slice(0, 160);
+  const snapshot = [];
+  for (const entry of files) {
+    const data = await githubRequest(
+      "/repos/" + encodeURIComponent(owner) + "/" + encodeURIComponent(name) +
+      "/contents/" + entry.path.split("/").map(encodeURIComponent).join("/") +
+      "?ref=" + encodeURIComponent(branch),
+      connection.token
+    );
+    const raw = data?.content ? Buffer.from(String(data.content).replace(/\s/g, ""), "base64").toString("utf8") : "";
+    snapshot.push({ path: entry.path, content: raw.slice(0, 50000) });
+  }
+  return snapshot;
+}
+\nasync function runThreeAgents({ user, buildId, siteId, owner, name, branch, command }) {
   const geminiKey = env("GEMINI_API_KEY");
   if (!geminiKey) throw new Error("GEMINI_GATEWAY_NOT_READY");
 
@@ -30,14 +72,29 @@ async function runThreeAgents({ user, buildId, siteId, owner, name, branch, comm
     admin.from("site_components").select("page_id,component_type,identifier,design_props,position_index").eq("site_id", siteId).limit(500)
   ]);
 
-  const gemini = await generateProjectBlueprint(
-    "Audit de préparation au déploiement. Analyse uniquement la structure frontend fournie. Ne modifie rien. Vérifie cohérence des pages, composants, navigation et actions. Le résultat sera utilisé comme contrôle d'architecture.",
-    { pages: pages || [], components: components || [] }
-  );
-  if (!gemini.success) throw new Error(gemini.error || "GEMINI_AUDIT_FAILED");
+  const snapshot = await loadFrontendSnapshot(user.id, owner, name, branch);
+  const gemini = await generateFrontendFiles({
+    repository: owner + "/" + name,
+    branch,
+    snapshot,
+    databaseSchema: { pages: pages || [], components: components || [] }
+  });
+  if (!gemini.success) throw new Error(gemini.error || "GEMINI_FRONTEND_BUILD_FAILED");
+
+  const frontendFiles = gemini.files || {};
+  if (Object.keys(frontendFiles).length) {
+    await pushFiles(user.id, owner, name, branch, frontendFiles, "feat(haspad): Gemini builds all frontend pages");
+  }
+
   await admin.from("ai_activity_logs").insert({
-    site_id: siteId, agent_name: "gemini-frontend", action_taken: "DEPLOYMENT_FRONTEND_AUDIT",
-    details: { build_id: buildId, model: gemini.model, status: "PASS" }
+    site_id: siteId, agent_name: "gemini-frontend", action_taken: "DEPLOYMENT_FRONTEND_BUILD",
+    details: {
+      build_id: buildId,
+      model: gemini.model,
+      status: "PASS",
+      page_count: Array.isArray(gemini.pages) ? gemini.pages.length : 0,
+      file_count: Object.keys(frontendFiles).length
+    }
   });
 
   const anthropicKey = env("ANTHROPIC_API_KEY");
