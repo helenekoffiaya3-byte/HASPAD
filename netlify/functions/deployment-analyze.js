@@ -71,6 +71,10 @@ export default async (req) => {
       "/git/trees/" + encodeURIComponent(branch) + "?recursive=1", connection.token);
     const files = (tree.tree || []).filter(x => x.type === "blob" && x.path).map(x => x.path).filter(x => x.length <= 300);
     const selected = files.filter(important).slice(0, 120);
+    const rootFiles = new Set(files.filter(p => !p.includes("/")));
+    const recognized = ["package.json","requirements.txt","pyproject.toml","Dockerfile","docker-compose.yml","docker-compose.yaml","index.html","go.mod","composer.json"].filter(x => rootFiles.has(x));
+    if (tree.truncated) return json(422, { error: "REPOSITORY_TREE_TRUNCATED", deployable: false, blockers: ["L'arborescence GitHub est trop volumineuse pour une prévalidation sûre."] });
+    if (!recognized.length) return json(422, { error: "UNSUPPORTED_PROJECT", deployable: false, blockers: ["Aucun manifeste de projet reconnu à la racine du dépôt."] });
 
     const contents = {};
     for (const path of selected) {
@@ -132,6 +136,14 @@ Rules:
     result.repository = { owner, name, branch };
     result.analyzedFiles = files.length;
     result.analyzedImportantFiles = selected.length;
+    const blockers = [];
+    if (!result.runtime || result.runtime === "other") blockers.push("Type de projet non pris en charge automatiquement.");
+    if (["docker","docker-compose"].includes(String(result.runtime))) blockers.push("Le runtime Docker doit être envoyé vers une cible Docker, pas vers le build Netlify standard.");
+    if (result.commandRequired && !String(result.command || "").trim()) blockers.push("Aucune commande de build sûre n'a pu être déterminée.");
+    if (result.confidence === "low") blockers.push("La détection de configuration est trop incertaine pour autoriser un déploiement automatique.");
+    if (String(result.command || "").includes(".env")) blockers.push("La commande détectée ne doit pas référencer un fichier secret.");
+    result.preflight = { branchResolved: true, repositoryReadable: true, recognizedRootFiles: recognized, blockers, deployable: blockers.length === 0 };
+    result.deployable = result.preflight.deployable;
 
     await admin.from("ai_activity_logs").insert({
       site_id: siteId,
