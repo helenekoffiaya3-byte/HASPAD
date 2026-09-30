@@ -73,3 +73,20 @@
 # GitHub -> Netlify deployment source
 [build.environment]
   NODE_VERSION = "22"
+
+[[redirects]]
+  from = "/domains"
+  to = "/domains.html"
+  status = 200
+[[redirects]]
+  from = "/billing"
+  to = "/billing.html"
+  status = 200
+[[redirects]]
+  from = "/deploy"
+  to = "/deploy.html"
+  status = 200
+[[redirects]]
+  from = "/git"
+  to = "/git.html"
+  status = 200
