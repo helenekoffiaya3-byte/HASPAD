@@ -12,6 +12,7 @@ export default async (req) => {
     const branches = await listBranches(user.id, match[1], match[2]);
     return json(200, { branches: (branches || []).map(b => ({ name: b.name, sha: b.commit?.sha, protected: Boolean(b.protected) })) });
   } catch (error) {
-    return json(error.status === 401 ? 401 : 502, { error: error.message || "Impossible de récupérer les branches." });
+    const status = [400,401,403,404,409,429].includes(Number(error?.status)) ? Number(error.status) : 502;
+    return json(status, { error: error?.message || "Impossible de récupérer les branches." });
   }
 };
