@@ -60,7 +60,7 @@ export default async (req) => {
     admin.from("project_builds").select("id,status,error_message,version_tag,updated_at").eq("site_id", siteId).order("build_number",{ascending:false}).limit(1).maybeSingle()
   ]);
 
-  const apiKey = env("OPENAI_API_KEY");
+  const apiKey = env("CHATGPT_API_KEY") || env("OPENAI_API_KEY");
   if (!apiKey) return json(503, { error: "CHATGPT_GATEWAY_NOT_READY" });
 
   const evidence = JSON.stringify({
