@@ -7,6 +7,7 @@ const repo = params.get("repo") || "";
 const initialBranch = params.get("branch") || "main";
 const [owner, name] = repo.split("/");
 let analysis = null;
+const runtimeTarget = () => $("#runtimeTarget").value || "netlify";
 
 function msg(text) { $("#analysisStatus").textContent = text; }
 function setDeploy(text) { $("#deployStatus").textContent = text; }
@@ -30,15 +31,18 @@ async function analyze() {
   }
   msg("ChatGPT inspecte le dépôt et détermine la commande exacte…");
   const branch = $("#branchSelect").value || initialBranch;
+  const targetRuntime = runtimeTarget();
   const r = await api("/api/deployment-analyze", {
     method: "POST",
-    body: JSON.stringify({ siteId, repositoryOwner: owner, repositoryName: name, branch })
+    body: JSON.stringify({ siteId, repositoryOwner: owner, repositoryName: name, branch, targetRuntime })
   });
   const d = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(d.error || "Analyse impossible.");
   analysis = d;
   $("#projectName").value = d.name || name;
   $("#buildCommand").value = d.commandRequired === false ? "Aucune commande de build nécessaire" : (d.command || "");
+  $("#dockerPort").value = d.port || "";
+  $("#healthcheckPath").value = d.healthcheckPath || "/";
   const blockers = d.preflight?.blockers || [];
   $("#evidence").textContent = (d.evidence || []).join("\n") || "Aucune preuve textuelle fournie.";
   if (blockers.length) {
@@ -46,11 +50,12 @@ async function analyze() {
     $("#deployButton").disabled = true;
     return;
   }
-  msg("Prévalidation réussie · aucun crédit débité · " + (d.framework || d.runtime || "projet détecté"));
+  msg("Prévalidation réussie · aucun crédit débité · cible " + (targetRuntime === "docker" ? "Docker / PaaS" : "Netlify") + " · " + (d.framework || d.runtime || "projet détecté"));
   $("#deployButton").disabled = false;
 }
 
 $("#branchSelect").addEventListener("change", () => { analysis = null; $("#deployButton").disabled = true; analyze().catch(e => msg(e.message)); });
+$("#runtimeTarget").addEventListener("change", () => { analysis = null; $("#deployButton").disabled = true; analyze().catch(e => msg(e.message)); });
 
 $("#deployButton").addEventListener("click", async () => {
   if (!analysis || analysis.deployable !== true || analysis.preflight?.deployable !== true) return;
@@ -62,7 +67,11 @@ $("#deployButton").addEventListener("click", async () => {
       method: "POST",
       body: JSON.stringify({
         siteId, repositoryOwner: owner, repositoryName: name, branch,
+        targetRuntime: runtimeTarget(),
         command: analysis.command || "",
+        port: Number(analysis.port || 0),
+        healthcheckPath: analysis.healthcheckPath || "/",
+
         baseDirectory: analysis.baseDirectory || "",
         publishDirectory: analysis.publishDirectory || "",
         preflightToken: analysis.preflightToken || ""
