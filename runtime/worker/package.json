@@ -1,1 +1,8 @@
-{"name":"haspad-runtime-worker","version":"1.0.0","private":true,"type":"module","scripts":{"start":"node server.js"},"dependencies":{"dockerode":"^4.0.9","express":"^5.1.0","tar":"^7.4.3"}}
+{
+  "name": "haspad-northflank-runtime",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": { "start": "node server.js" },
+  "dependencies": { "express": "^5.1.0" }
+}
