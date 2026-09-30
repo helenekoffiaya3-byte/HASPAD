@@ -62,7 +62,7 @@ export default async (req) => {
       repo_url: repoUrl,
       repo_branch: branch,
       cmd: command,
-      dir: baseDirectory || existing.dir || "",
+      dir: publishDirectory || existing.dir || "",
       allowed_branches: Array.from(new Set([...(existing.allowed_branches || []), branch]))
     };
 
