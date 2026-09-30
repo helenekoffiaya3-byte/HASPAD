@@ -54,7 +54,7 @@ export default async(req)=>{
   if(!site)return json(403,{error:"Accès refusé."});
   if(!site.netlify_site_id)return json(503,{error:"Aucune cible Netlify n'est associée au projet."});
 
-  const cost=Math.max(1,Number(env("GIT_DEPLOY_CREDIT_COST")||1));
+  const cost=Math.max(1,Number(env("GIT_DEPLOY_CREDIT_COST")||300));
   const referenceId=crypto.randomUUID();
   const allocationResult=await admin.rpc("consume_credits_and_create_build_v2",{
     p_user_id:user.id,p_site_id:siteId,p_cost:cost,p_reference_id:referenceId,
@@ -69,7 +69,7 @@ export default async(req)=>{
     const {data:pages,error:pagesError}=await admin.from("pages").select("slug,root_block").eq("site_id",siteId).order("slug");
     if(pagesError)throw pagesError;
     const files=compileFiles(pages);
-    const commitSha=await pushFiles(user.id,match[1],match[2],branch,files,"HASPAD "+allocation.version);
+    const commitSha=await pushFiles(user.id,match[1],match[2],branch,files,"HASPAD "+allocation.version+" [skip netlify]");
     await admin.from("project_builds").update({commit_hash:commitSha,status:"building",triggered_at:new Date().toISOString(),updated_at:new Date().toISOString()}).eq("id",buildId).eq("status","pending");
 
     const digest={};
