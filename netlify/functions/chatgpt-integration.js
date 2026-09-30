@@ -67,7 +67,7 @@ export default async (req) => {
         Authorization: `Bearer ${apiKey}`
       },
       body: JSON.stringify({
-        model: env("CHATGPT_MODEL") || "gpt-5.6",
+        model: env("CHATGPT_MODEL") || "gpt-5.6-luna",
         instructions: SYSTEM,
         input: evidence
       })
@@ -86,7 +86,7 @@ export default async (req) => {
       site_id: build.site_id,
       agent_name: "chatgpt-integration",
       action_taken: "INTEGRATION_REPAIR_AUDIT",
-      details: { build_id: build.id, model: env("CHATGPT_MODEL") || "gpt-5.6", status: parsed.status }
+      details: { build_id: build.id, model: env("CHATGPT_MODEL") || "gpt-5.6-luna", status: parsed.status }
     });
     if (logError) console.error("chatgpt-integration log", logError);
 
