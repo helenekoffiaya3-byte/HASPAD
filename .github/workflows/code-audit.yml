@@ -4,87 +4,26 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+
 jobs:
-  probe:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Probe Node syntax checker
-        run: |
-          node --version
-          printf 'const x = 1;\n' > /tmp/probe.mjs
-          node --check /tmp/probe.mjs
   syntax:
-    strategy:
-      fail-fast: false
-      matrix:
-        file:
-          - 'netlify/functions/_auth.js'
-          - 'netlify/functions/_builds.js'
-          - 'netlify/functions/_container-provider.js'
-          - 'netlify/functions/_credits.js'
-          - 'netlify/functions/_db.js'
-          - 'netlify/functions/_deployment-router.js'
-          - 'netlify/functions/_github.js'
-          - 'netlify/functions/_paydunya.js'
-          - 'netlify/functions/_runtime.js'
-          - 'netlify/functions/ai-architect.js'
-          - 'netlify/functions/ai-devops.js'
-          - 'netlify/functions/ai-orchestrator.js'
-          - 'netlify/functions/aiService.js'
-          - 'netlify/functions/auth-me.js'
-          - 'netlify/functions/build-version.js'
-          - 'netlify/functions/configure-domain.js'
-          - 'netlify/functions/create-site.js'
-          - 'netlify/functions/credits.js'
-          - 'netlify/functions/deployment-create.js'
-          - 'netlify/functions/deployment-detect.js'
-          - 'netlify/functions/deployment-diagnose.js'
-          - 'netlify/functions/deployment-logs.js'
-          - 'netlify/functions/deployment-rollback.js'
-          - 'netlify/functions/deployment-status.js'
-          - 'netlify/functions/domain-availability.js'
-          - 'netlify/functions/domain-pricing.js'
-          - 'netlify/functions/editor-pages.js'
-          - 'netlify/functions/editor-sites.js'
-          - 'netlify/functions/generate-control-schema.js'
-          - 'netlify/functions/git-branches.js'
-          - 'netlify/functions/git-deploy.js'
-          - 'netlify/functions/git-repos.js'
-          - 'netlify/functions/git-status.js'
-          - 'netlify/functions/github-callback.js'
-          - 'netlify/functions/github-connect.js'
-          - 'netlify/functions/health.js'
-          - 'netlify/functions/identity.js'
-          - 'netlify/functions/paydunya-callback.js'
-          - 'netlify/functions/paydunya-create.js'
-          - 'netlify/functions/paydunya-verify.js'
-          - 'netlify/functions/payment-google.js'
-          - 'netlify/functions/project-analyze.js'
-          - 'netlify/functions/provision-startup.js'
-          - 'netlify/functions/public-content.js'
-          - 'public/js/app.js'
-          - 'public/js/auth.js'
-          - 'public/js/canvas.js'
-          - 'public/js/control-center.js'
-          - 'public/js/dashboard.js'
-          - 'public/js/deployment.js'
-          - 'public/js/editor.js'
-          - 'public/js/git.js'
-          - 'public/js/offline.js'
-          - 'public/js/settings.js'
-          - 'runtime/worker/docker-runtime.js'
-          - 'runtime/worker/server.js'
     runs-on: ubuntu-latest
-    name: syntax — ${{ matrix.file }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
       - name: Check JavaScript syntax
+        shell: bash
         run: |
-          cp "${{ matrix.file }}" /tmp/haspad-syntax-check.mjs
-          node --check /tmp/haspad-syntax-check.mjs
+          set -euo pipefail
+          mapfile -d '' files < <(find netlify/functions runtime/worker public/js -type f -name '*.js' -print0)
+          test "${#files[@]}" -gt 0
+          for file in "${files[@]}"; do
+            echo "Checking $file"
+            cp "$file" /tmp/haspad-syntax-check.mjs
+            node --check /tmp/haspad-syntax-check.mjs
+          done
       - name: Validate package JSON
-        if: ${{ matrix.file == 'netlify/functions/_auth.js' }}
-        run: node -e "for (const f of ['package.json','runtime/worker/package.json']) { JSON.parse(require('fs').readFileSync(f,'utf8')); console.log(f + ' OK') }"
+        run: |
+          node -e "for (const f of ['package.json','runtime/worker/package.json']) { JSON.parse(require('fs').readFileSync(f,'utf8')); console.log(f + ' OK') }"
