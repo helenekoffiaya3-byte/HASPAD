@@ -74,3 +74,14 @@ export async function deploy(body){
 export async function getRuntimeStatus(id){const j=jobs.get(clean(id,80));if(!j?.containerId)return j||{status:"unknown"};try{const i=await docker.getContainer(j.containerId).inspect();return {...j,status:i.State?.Status||j.status,health:i.State?.Health?.Status||null,restarts:i.RestartCount}}catch{return {...j,status:"gone"}}}
 export async function getLogs(id){const j=jobs.get(clean(id,80));if(!j?.containerId)throw Error("RUNTIME_NOT_FOUND");const b=await docker.getContainer(j.containerId).logs({stdout:true,stderr:true,tail:500,timestamps:true});return {runtimeId:id,logs:b.toString("utf8").slice(-100000)}}
 export async function rollback(body){const id=required(body,"runtimeId"),image=required(body,"previousImage"),projectId=required(body,"projectId"),host=required(body,"host"),port=Number(body.port||3000),network=process.env.DOCKER_NETWORK||"haspad-runtime",name="haspad-"+clean(id,80),c=await docker.createContainer({name,Image:image,Env:envPairs(body.env),ExposedPorts:{[port+"/tcp"]:{}},Labels:labels(projectId,host,port,"rollback"),User:"1000:1000",HostConfig:{NetworkMode:network,Memory:536870912,NanoCpus:1000000000,PidsLimit:256,ReadonlyRootfs:true,Tmpfs:{"/tmp":"rw,noexec,nosuid,size=256m"},SecurityOpt:["no-new-privileges:true"],CapDrop:["ALL"],RestartPolicy:{Name:"unless-stopped"}}});await c.start();await waitReady(c,port,body.healthcheckPath||"/");for(const oc of await projectContainers(projectId)){if(oc.id!==c.id)await oc.remove({force:true}).catch(()=>{})}jobs.set(id,{status:"running",projectId,containerId:c.id,image,host});return {success:true,runtimeId:id,containerId:c.id,image}}
+
+export async function restartRuntime(id){
+ const j=jobs.get(clean(id,80)); if(!j?.containerId) throw Error("RUNTIME_NOT_FOUND");
+ const container=docker.getContainer(j.containerId); await container.restart(); jobs.set(clean(id,80),{...j,status:"running",restartedAt:new Date().toISOString()});
+ return {success:true,runtimeId:id,status:"running"};
+}
+export async function stopRuntime(id){
+ const j=jobs.get(clean(id,80)); if(!j?.containerId) throw Error("RUNTIME_NOT_FOUND");
+ const container=docker.getContainer(j.containerId); await container.stop().catch(()=>{}); jobs.set(clean(id,80),{...j,status:"stopped",stoppedAt:new Date().toISOString()});
+ return {success:true,runtimeId:id,status:"stopped"};
+}
