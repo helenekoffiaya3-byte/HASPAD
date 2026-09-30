@@ -17,9 +17,9 @@ function verifyPreflight(token, expected) {
     if (!enc || !sig) return false;
     const payload = Buffer.from(enc,"base64url").toString("utf8");
     const actual = JSON.parse(payload);
-    if (Date.now()-Number(actual.t) > 10*60*1000) return false;
+    if (!Number.isFinite(Number(actual.t)) || Math.abs(Date.now()-Number(actual.t)) > 10*60*1000) return false;
     for (const k of ["u","s","o","n","b","r"]) if (String(actual[k]) !== String(expected[k])) return false;
-    for (const k of ["c","bd","pd"]) if (String(actual[k]||"") !== String(expected[k]||"")) return false;
+    for (const k of ["c","bd","pd","p","h"]) if (String(actual[k]||"") !== String(expected[k]||"")) return false;
     const expectedSig = crypto.createHmac("sha256", preflightSecret()).update(payload).digest();
     const providedSig = Buffer.from(sig,"base64url");
     return expectedSig.length === providedSig.length && crypto.timingSafeEqual(expectedSig, providedSig);
@@ -252,7 +252,7 @@ export default async (req) => {
       dir: publishDirectory || existing.dir || "",
       allowed_branches: Array.from(new Set([...(existing.allowed_branches || []), branch]))
     };
-    await netlify("https://api.netlify.com/api/v1/sites/" + encodeURIComponent(site.netlify_site_id), {
+    if (targetRuntime === "netlify") await netlify("https://api.netlify.com/api/v1/sites/" + encodeURIComponent(site.netlify_site_id), {
       method: "PATCH", body: JSON.stringify({ build_settings: buildSettings, repo: buildSettings })
     });
 
