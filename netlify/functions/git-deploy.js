@@ -64,6 +64,7 @@ export default async(req)=>{
   const allocation=allocationResult.data;
   if(!allocation?.success)return json(allocation.error==="INSUFFICIENT_CREDITS"?402:400,{error:allocation.error,remainingCredits:allocation.remaining_credits});
   const buildId=allocation.build_id;
+  if(allocation.reused||allocation.idempotent)return json(202,{success:true,reused:true,buildId,status:allocation.status||"building",remainingCredits:allocation.remaining_credits,message:"Un déploiement identique est déjà en cours. Aucun nouveau crédit n'a été débité."});
   let netlifyTriggered=false;
   try{
     const {data:pages,error:pagesError}=await admin.from("pages").select("slug,root_block").eq("site_id",siteId).order("slug");
@@ -71,11 +72,13 @@ export default async(req)=>{
     const files=compileFiles(pages);
     const commitSha=await pushFiles(user.id,match[1],match[2],branch,files,"HASPAD "+allocation.version+" [skip netlify]");
     await admin.from("project_builds").update({commit_hash:commitSha,status:"building",triggered_at:new Date().toISOString(),updated_at:new Date().toISOString()}).eq("id",buildId).eq("status","pending");
+    await ensureDeployFailureHook(site.netlify_site_id);
 
     const digest={};
     for(const [path,bodyText] of Object.entries(files))digest[path]=crypto.createHash("sha1").update(bodyText).digest("hex");
     const deploy=await netlifyJson("https://api.netlify.com/api/v1/sites/"+encodeURIComponent(site.netlify_site_id)+"/deploys?production=true&title="+encodeURIComponent("HASPAD "+allocation.version+" "+buildId),{method:"POST",body:JSON.stringify({files:digest,async:true})});
     netlifyTriggered=true;
+    await admin.from("project_builds").update({netlify_deploy_id:deploy.id,updated_at:new Date().toISOString()}).eq("id",buildId);
     const prepared=await waitPrepared(deploy.id);
     await admin.from("project_builds").update({netlify_deploy_id:prepared.id,updated_at:new Date().toISOString()}).eq("id",buildId);
     const required=new Set(prepared.required||[]);
