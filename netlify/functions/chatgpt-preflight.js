@@ -60,8 +60,8 @@ export default async (req) => {
     admin.from("project_builds").select("id,status,error_message,version_tag,updated_at").eq("site_id", siteId).order("build_number",{ascending:false}).limit(1).maybeSingle()
   ]);
 
-  const apiKey = env("CHATGPT_API_KEY") || env("OPENAI_API_KEY");
-  if (!apiKey) return json(503, { error: "CHATGPT_GATEWAY_NOT_READY" });
+  const apiKey = env("OPENAI_API_KEY");
+  if (!apiKey) return json(503, { error: "OPENAI_GATEWAY_NOT_READY" });
 
   const evidence = JSON.stringify({
     site: { id: site.id, name: site.name, hasNetlifyTarget: Boolean(site.netlify_site_id) },
@@ -85,7 +85,7 @@ export default async (req) => {
       })
     });
 
-    if (!response.ok) return json(502, { error: "CHATGPT_GATEWAY_ERROR" });
+    if (!response.ok) return json(502, { error: "OPENAI_GATEWAY_ERROR" });
 
     const data = await response.json();
     const raw = data.output_text || "";
@@ -106,7 +106,7 @@ export default async (req) => {
     return json(200, { success: true, agent: "chatgpt-integration", result });
   } catch (error) {
     console.error("chatgpt-preflight", error?.message || error);
-    return json(422, { error: "CHATGPT_PREFLIGHT_FAILED" });
+    return json(422, { error: "OPENAI_PREFLIGHT_FAILED" });
   }
 };
 
