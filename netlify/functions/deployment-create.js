@@ -53,7 +53,7 @@ export default async req=>{
   if(!c)return json(400,{error:"GITHUB_NOT_CONNECTED"});
 
   const runtime=String(b.runtime||b.detectedRuntime||"unknown");
-  const cost=Number(env("GIT_DEPLOY_CREDIT_COST")||300);
+  const cost=Math.max(1,Number(env("GIT_DEPLOY_CREDIT_COST")||300));
   const referenceId=crypto.randomUUID();
   const consumed=await admin.rpc("consume_credits_and_create_build_v2",{
     p_site_id:b.siteId,
@@ -67,9 +67,11 @@ export default async req=>{
     p_reference_id:referenceId
   });
   if(consumed.error||!consumed.data?.success)
-    return json(402,{error:consumed.error?.message||consumed.data?.error||"DEPLOYMENT_CREDIT_FAILED"});
+    return json(consumed.data?.error==="INSUFFICIENT_CREDITS"?402:500,{error:consumed.error?.message||consumed.data?.error||"DEPLOYMENT_CREDIT_FAILED"});
 
   const buildId=consumed.data.build_id;
+  if(consumed.data.reused||consumed.data.idempotent)
+    return json(202,{success:true,reused:true,buildId,status:consumed.data.status||"building",message:"Un déploiement identique est déjà en cours. Aucun nouveau crédit n'a été débité."});
   try{
     const host=requestedHost.replace(/[^a-z0-9.-]/g,"");
     const saved=await admin.from("deployment_projects").upsert({
@@ -108,7 +110,7 @@ export default async req=>{
 
     const publicUrl=result.publicUrl||result.url||null;
     await admin.from("project_builds").update({
-      status:"queued",
+      status:"building",
       deploy_url:publicUrl,
       triggered_at:new Date().toISOString(),
       updated_at:new Date().toISOString()
