@@ -147,6 +147,8 @@ Rules:
     result.preflight = { branchResolved: true, repositoryReadable: true, recognizedRootFiles: recognized, blockers, deployable: blockers.length === 0 };
     result.deployable = result.preflight.deployable;
     if (result.deployable) {
+      const secret = preflightSecret();
+      if (!secret) return json(503, { error: "PREFLIGHT_SIGNING_NOT_CONFIGURED", deployable: false, blockers: ["La clé de signature du préflight n'est pas configurée. Aucun déploiement ne peut être autorisé."] });
       const payload = JSON.stringify({u:String(user.id),s:siteId,o:owner,n:name,b:branch,c:String(result.command||""),bd:String(result.baseDirectory||""),pd:String(result.publishDirectory||""),t:Date.now()});
       const sig = crypto.createHmac("sha256", preflightSecret()).update(payload).digest("base64url");
       result.preflightToken = Buffer.from(payload).toString("base64url") + "." + sig;
