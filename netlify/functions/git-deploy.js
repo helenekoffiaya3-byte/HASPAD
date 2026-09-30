@@ -26,6 +26,20 @@ async function netlifyJson(url,options={}){
   return data;
 }
 async function getDeploy(deployId){return netlifyJson("https://api.netlify.com/api/v1/deploys/"+encodeURIComponent(deployId));}
+async function ensureDeployFailureHook(siteId){
+  const secret=env("NETLIFY_WEBHOOK_SECRET");
+  if(!secret)return;
+  const publicUrl=env("PUBLIC_SITE_URL");
+  if(!publicUrl)return;
+  const hookUrl=publicUrl+"/api/netlify-deploy-hook?token="+encodeURIComponent(secret);
+  try{
+    const hooks=await netlifyJson("https://api.netlify.com/api/v1/hooks?site_id="+encodeURIComponent(siteId));
+    const existing=Array.isArray(hooks)?hooks.find(h=>h?.type==="url"&&h?.event==="deploy_failed"&&h?.data?.url===hookUrl):null;
+    if(existing&&!existing.disabled)return existing.id;
+    const created=await netlifyJson("https://api.netlify.com/api/v1/hooks",{method:"POST",body:JSON.stringify({site_id:siteId,type:"url",event:"deploy_failed",data:{url:hookUrl}})});
+    return created?.id||null;
+  }catch(error){console.warn("Netlify deploy-failure hook unavailable:",error?.message||error);return null;}
+}
 async function waitPrepared(deployId){
   let deploy=await getDeploy(deployId);
   for(let i=0;i<15;i++){
