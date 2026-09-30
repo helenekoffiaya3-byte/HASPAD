@@ -1,6 +1,9 @@
 import { getUser } from "@netlify/identity";
 import { admin, json } from "./_credits.js";
 import crypto from "crypto";
+import Anthropic from "@anthropic-ai/sdk";
+import { generateProjectBlueprint } from "./aiService.js";
+import { githubConnection, pushFiles } from "./_github.js";
 
 const env = (name) => globalThis.Netlify?.env?.get?.(name) ?? process.env[name];
 const UUID = /^[0-9a-f-]{36}$/i;
@@ -15,6 +18,77 @@ async function netlify(url, options = {}) {
   const d = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(d?.message || d?.error || "NETLIFY_API_ERROR");
   return d;
+}
+
+
+async function runThreeAgents({ user, buildId, siteId, owner, name, branch, command }) {
+  const geminiKey = env("GEMINI_API_KEY");
+  if (!geminiKey) throw new Error("GEMINI_GATEWAY_NOT_READY");
+
+  const [{ data: pages }, { data: components }] = await Promise.all([
+    admin.from("pages").select("slug,root_block,seo").eq("site_id", siteId).limit(100),
+    admin.from("site_components").select("page_id,component_type,identifier,design_props,position_index").eq("site_id", siteId).limit(500)
+  ]);
+
+  const gemini = await generateProjectBlueprint(
+    "Audit de préparation au déploiement. Analyse uniquement la structure frontend fournie. Ne modifie rien. Vérifie cohérence des pages, composants, navigation et actions. Le résultat sera utilisé comme contrôle d'architecture.",
+    { pages: pages || [], components: components || [] }
+  );
+  if (!gemini.success) throw new Error(gemini.error || "GEMINI_AUDIT_FAILED");
+  await admin.from("ai_activity_logs").insert({
+    site_id: siteId, agent_name: "gemini-frontend", action_taken: "DEPLOYMENT_FRONTEND_AUDIT",
+    details: { build_id: buildId, model: gemini.model, status: "PASS" }
+  });
+
+  const anthropicKey = env("ANTHROPIC_API_KEY");
+  const anthropicBase = env("ANTHROPIC_BASE_URL");
+  if (!anthropicKey || !anthropicBase) throw new Error("CLAUDE_GATEWAY_NOT_READY");
+  const claudeClient = new Anthropic({ apiKey: anthropicKey, baseURL: anthropicBase });
+  const claudeResponse = await claudeClient.messages.create({
+    model: env("CLAUDE_MODEL") || "claude-sonnet-5-5",
+    max_tokens: 12000,
+    system: "Tu es Claude, agent Backend HASPAD. Génère le backend nécessaire à l'application. Retourne UNIQUEMENT JSON: {projectType,framework,files:[{path,content}],env:[{key,required,secret,description}],endpoints:[{method,path,description}],tests:[{path,content}],notes:[string]}. Aucun secret, aucun chemin absolu, aucun code destructif. Le résultat sera écrit dans le dépôt avant le contrôle final.",
+    messages: [{ role: "user", content: JSON.stringify({
+      buildId, repository: owner + "/" + name, branch, command,
+      frontendBlueprint: gemini.blueprint || null,
+      instruction: "Construis ou complète uniquement le backend nécessaire pour rendre le projet déployable et connecté."
+    }) }]
+  });
+  const claudeRaw = claudeResponse.content.filter(p => p.type === "text").map(p => p.text).join("\n").trim();
+  const claude = JSON.parse(claudeRaw.replace(/^\`\`\`(?:json)?\s*/i, "").replace(/\s*\`\`\`$/i, ""));
+  if (!Array.isArray(claude.files) || claude.files.length > 80) throw new Error("INVALID_CLAUDE_MANIFEST");
+  const files = Object.fromEntries(claude.files.map(f => [String(f.path), String(f.content)]));
+  for (const p of Object.keys(files)) {
+    if (!p || p.startsWith("/") || p.includes("..") || p.includes("\\") || p.includes(".env")) throw new Error("INVALID_CLAUDE_PATH");
+  }
+  if (Object.keys(files).length) {
+    await pushFiles(user.id, owner, name, branch, files, "chore(haspad): apply Claude backend before deployment");
+  }
+  await admin.from("ai_activity_logs").insert({
+    site_id: siteId, agent_name: "claude-backend-builder", action_taken: "DEPLOYMENT_BACKEND_GENERATION",
+    details: { build_id: buildId, model: env("CLAUDE_MODEL") || "claude-sonnet-5-5", file_count: Object.keys(files).length }
+  });
+
+  const openaiKey = env("OPENAI_API_KEY");
+  if (!openaiKey) throw new Error("OPENAI_GATEWAY_NOT_READY");
+  const chatResponse = await fetch(env("OPENAI_BASE_URL") || "https://api.openai.com/v1/responses", {
+    method: "POST",
+    headers: { "content-type": "application/json", authorization: "Bearer " + openaiKey },
+    body: JSON.stringify({
+      model: env("CHATGPT_MODEL") || "gpt-5.6-luna",
+      instructions: "Tu es ChatGPT, dernier agent d'intégration HASPAD. Vérifie que frontend, backend Claude, routes, API, variables et commande de build sont cohérents. Retourne UNIQUEMENT JSON: {status:'PASS'|'REPAIR_REQUIRED'|'BLOCKED',errors:[{file,message}],fixes:[{file,reason}],checks:[{name,result,evidence}],notes:[string]}. PASS seulement si le déploiement peut partir sans erreur d'intégration évidente.",
+      input: JSON.stringify({ siteId, repository: owner + "/" + name, branch, command, frontend: gemini, backend: claude })
+    })
+  });
+  if (!chatResponse.ok) throw new Error("OPENAI_GATEWAY_ERROR");
+  const chatData = await chatResponse.json();
+  const chatgpt = JSON.parse(String(chatData.output_text || "").replace(/^\`\`\`json\s*/i, "").replace(/\s*\`\`\`$/i, ""));
+  await admin.from("ai_activity_logs").insert({
+    site_id: siteId, agent_name: "chatgpt-integration", action_taken: "DEPLOYMENT_FINAL_GATE",
+    details: { build_id: buildId, model: env("CHATGPT_MODEL") || "gpt-5.6-luna", status: chatgpt.status }
+  });
+  if (chatgpt.status !== "PASS") throw new Error("AI_GATE_" + chatgpt.status);
+  return { gemini: "PASS", claude: "BACKEND_READY", chatgpt: "PASS" };
 }
 
 export default async (req) => {
@@ -51,6 +125,7 @@ export default async (req) => {
 
   const buildId = allocation.build_id;
   try {
+    const agents = await runThreeAgents({ user, buildId, siteId, owner, name, branch, command });
     const current = await netlify("https://api.netlify.com/api/v1/sites/" + encodeURIComponent(site.netlify_site_id));
     const existing = current.build_settings || current.repo || {};
     const repoPath = owner + "/" + name;
@@ -81,7 +156,7 @@ export default async (req) => {
       netlify_deploy_id: build.deploy_id || null
     }).eq("id", buildId);
 
-    return json(202, { success: true, buildId, netlifyBuildId: build.id, netlifyDeployId: build.deploy_id || null, command, branch });
+    return json(202, { success: true, buildId, netlifyBuildId: build.id, netlifyDeployId: build.deploy_id || null, command, branch, agents });
   } catch (error) {
     await admin.rpc("fail_build_and_refund", { p_build_id: buildId, p_error: String(error?.message || "DEPLOYMENT_FAILED").slice(0, 1000) });
     console.error("deployment-trigger", error?.message || error);
