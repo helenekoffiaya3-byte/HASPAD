@@ -178,7 +178,7 @@ export async function generateFrontendFiles({ repository, branch, snapshot, data
       const path = String(item.path || "").trim();
       const content = String(item.content ?? "");
       if (!path || path.startsWith("/") || path.includes("..") || path.includes("\\") ||
-          path.includes(".env") || !/^public\\/(?:[^\\/]+(?:\\/[^\\/]+)*)$/.test(path)) {
+          path.includes(".env") || !/^public\/(?:[^/]+\/)*[^/]+$/i.test(path)) {
         throw new Error("INVALID_GEMINI_FRONTEND_PATH");
       }
       if (!/\.(?:html|css|js|mjs|json|svg)$/i.test(path)) {
