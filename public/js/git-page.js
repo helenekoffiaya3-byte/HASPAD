@@ -1,0 +1,1 @@
+import{logout}from"./auth.js";import{initGit}from"./git.js";const me=await fetch("/api/auth-me",{credentials:"include"});if(!me.ok){location.href="/connexion.html"}else{const r=await fetch("/api/editor-sites",{credentials:"include"});const d=await r.json().catch(()=>({}));const site=d.sites?.[0];if(site)await initGit(site.id)}$("#logout")?.addEventListener("click",logout);
