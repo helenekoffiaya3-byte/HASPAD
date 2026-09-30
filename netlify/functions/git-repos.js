@@ -19,6 +19,7 @@ export default async (req) => {
     return json(405, { error: "Method Not Allowed" });
   } catch (error) {
     console.error("git-repos", error);
-    return json(error.status === 401 ? 401 : 502, { error: error.message || "GitHub indisponible." });
+    const status = [400,401,403,404,409,429].includes(Number(error?.status)) ? Number(error.status) : 502;
+    return json(status, { error: error?.message || "GitHub indisponible." });
   }
 };
