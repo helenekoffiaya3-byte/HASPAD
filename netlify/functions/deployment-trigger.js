@@ -286,18 +286,20 @@ export default async (req) => {
         repositoryOwner: owner,
         repositoryName: name,
         branch,
-        githubToken: connection.token,
         host,
         port,
         healthcheckPath,
         dockerfilePath: "Dockerfile"
       }, "POST");
       netlifyAccepted = true;
+      const runtimeStatus = String(runtime.status || "building").toLowerCase();
+      if (runtimeStatus === "failed") throw new Error("NORTHFLANK_DEPLOYMENT_FAILED");
+      const persistedStatus = runtimeStatus === "running" ? "success" : "building";
       const savedRuntime = await admin.from("project_builds").update({
-        status:"success", updated_at:new Date().toISOString(), deploy_url:runtime.publicUrl||null
+        status:persistedStatus, updated_at:new Date().toISOString(), deploy_url:runtime.publicUrl||null
       }).eq("id",creditedBuildId).eq("status","building").select("id").maybeSingle();
       if (savedRuntime.error) throw new Error("RUNTIME_ACCEPTED_DB_SYNC_FAILED");
-      return json(202,{success:true,buildId:creditedBuildId,runtimeId:creditedBuildId,targetRuntime:"docker",host,publicUrl:runtime.publicUrl||null,health:runtime.health||null,remainingCredits:allocation.remaining_credits});
+      return json(202,{success:true,buildId:creditedBuildId,runtimeId:creditedBuildId,targetRuntime:"docker",host,publicUrl:runtime.publicUrl||null,health:runtimeStatus,remainingCredits:allocation.remaining_credits});
     }
 
     // L'unique appel de lancement Netlify est ici.
