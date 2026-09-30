@@ -23,7 +23,7 @@ jobs:
           fi
           for file in "${files[@]}"; do
             echo "Checking $file"
-            node --check "$file"
+            node --check --input-type=module < "$file"
           done
       - name: Validate package JSON
         run: |
