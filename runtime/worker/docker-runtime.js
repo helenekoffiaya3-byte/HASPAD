@@ -39,6 +39,7 @@ async function ensureNetwork(name){
  return docker.getNetwork(n.id);
 }
 async function projectContainers(project){const a=await docker.listContainers({all:true,filters:{label:["haspad.project="+clean(project,80)]}});return a.map(x=>docker.getContainer(x.Id))}
+async function runtimeContainers(runtimeId){const a=await docker.listContainers({all:true,filters:{label:["haspad.runtime="+clean(runtimeId,80)]}});return a.map(x=>docker.getContainer(x.Id))}
 async function waitReady(c,port,pathName="/",timeoutMs=60000){
  const deadline=Date.now()+timeoutMs;let last="";
  while(Date.now()<deadline){try{
@@ -58,6 +59,15 @@ async function pushRegistry(tag){
 }
 export async function deploy(body){
  const projectId=required(body,"projectId"),runtimeId=clean(body.runtimeId||crypto.randomUUID(),80),port=Math.max(1,Math.min(65535,Number(body.port||3000))),host=required(body,"host"),tag="haspad/"+clean(projectId,50)+":"+clean(body.commitSha||runtimeId,60),network=process.env.DOCKER_NETWORK||"haspad-runtime";
+ const existingContainers=await runtimeContainers(runtimeId);
+ for(const existing of existingContainers){
+   const info=await existing.inspect().catch(()=>null);
+   if(info?.State?.Running){
+     jobs.set(runtimeId,{status:"running",projectId,containerId:existing.id,host});
+     return {success:true,reused:true,runtimeId,containerId:existing.id,image:info.Config?.Image||null,publicUrl:"https://"+host,health:"running"};
+   }
+   await existing.remove({force:true}).catch(()=>{});
+ }
  jobs.set(runtimeId,{status:"building",projectId});
  let createdContainer=null;
  try{
