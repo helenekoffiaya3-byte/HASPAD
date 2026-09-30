@@ -79,7 +79,7 @@ export default async (req) => {
       method: "POST",
       headers: { "content-type": "application/json", authorization: `Bearer ${apiKey}` },
       body: JSON.stringify({
-        model: env("CHATGPT_MODEL") || "gpt-5.6",
+        model: env("CHATGPT_MODEL") || "gpt-5.6-luna",
         instructions: SYSTEM,
         input: evidence
       })
@@ -96,7 +96,7 @@ export default async (req) => {
       agent_name: "chatgpt-integration",
       action_taken: "PRE_DEPLOYMENT_GATE",
       details: {
-        model: env("CHATGPT_MODEL") || "gpt-5.6",
+        model: env("CHATGPT_MODEL") || "gpt-5.6-luna",
         status: result.status,
         error_count: Array.isArray(result.errors) ? result.errors.length : 0,
         fix_count: Array.isArray(result.fixes) ? result.fixes.length : 0
