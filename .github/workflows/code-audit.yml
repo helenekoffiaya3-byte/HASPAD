@@ -74,7 +74,8 @@ jobs:
         with:
           node-version: 22
       - name: Check JavaScript syntax
-        run: node --check --input-type=module < "${{ matrix.file }}"
+        run: cp "${{ matrix.file }}" /tmp/haspad-syntax-check.mjs
+        node --check /tmp/haspad-syntax-check.mjs
       - name: Validate package JSON
         if: ${{ matrix.file == 'netlify/functions/_auth.js' }}
         run: node -e "for (const f of ['package.json','runtime/worker/package.json']) { JSON.parse(require('fs').readFileSync(f,'utf8')); console.log(f + ' OK') }"
