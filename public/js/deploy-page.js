@@ -64,7 +64,8 @@ $("#deployButton").addEventListener("click", async () => {
         siteId, repositoryOwner: owner, repositoryName: name, branch,
         command: analysis.command || "",
         baseDirectory: analysis.baseDirectory || "",
-        publishDirectory: analysis.publishDirectory || ""
+        publishDirectory: analysis.publishDirectory || "",
+        preflightToken: analysis.preflightToken || ""
       })
     });
     const d = await r.json().catch(() => ({}));
