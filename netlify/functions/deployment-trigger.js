@@ -317,6 +317,13 @@ export default async (req) => {
       command, branch, agents, remainingCredits:allocation.remaining_credits
     });
   } catch (error) {
+    if (creditedBuildId && !netlifyAccepted && targetRuntime === "docker" && env("HASPAD_RUNTIME_URL") && env("HASPAD_RUNTIME_SHARED_SECRET")) {
+      try {
+        const recovery = await runtimeRequest("/v1/status/" + encodeURIComponent(creditedBuildId), {}, "GET");
+        const state = String(recovery?.status || recovery?.state || "").toLowerCase();
+        if (["building","running","healthy","active"].includes(state)) netlifyAccepted = true;
+      } catch {}
+    }
     if (creditedBuildId && !netlifyAccepted) {
       await admin.rpc("fail_build_and_refund",{p_build_id:creditedBuildId,p_error:String(error?.message||"DEPLOYMENT_FAILED").slice(0,1000)});
     } else if (creditedBuildId && netlifyAccepted) {
