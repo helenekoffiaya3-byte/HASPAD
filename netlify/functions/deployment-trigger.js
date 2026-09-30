@@ -7,7 +7,8 @@ import { githubConnection, pushFiles } from "./_github.js";
 
 const env = (name) => globalThis.Netlify?.env?.get?.(name) ?? process.env[name];
 const UUID = /^[0-9a-f-]{36}$/i;
-const SAFE_COMMAND = /^[A-Za-z0-9_./:@%+?=,-]+(?:\s+[A-Za-z0-9_./:@%+?=,-]+)*$/;\nconst ACTIVE_BUILD_STATES = new Set(["pending", "building", "queued", "processing"]);
+const SAFE_COMMAND = /^[A-Za-z0-9_./:@%+?=,-]+(?:\s+[A-Za-z0-9_./:@%+?=,-]+)*$/;
+const ACTIVE_BUILD_STATES = new Set(["pending", "building", "queued", "processing"]);
 
 async function netlify(url, options = {}) {
   const token = env("NETLIFY_AUTH_TOKEN");
