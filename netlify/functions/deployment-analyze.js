@@ -20,7 +20,7 @@ async function gh(path, token) {
 
 const important = (path) => {
   const p = path.toLowerCase();
-  return /(^|\/)(package\.json|pnpm-lock\.yaml|yarn\.lock|package-lock\.json|bun\.lockb?|requirements\.txt|pyproject\.toml|poetry\.lock|pipfile|go\.mod|cargo\.toml|composer\.json|gemfile|dockerfile|docker-compose\.ya?ml|netlify\.toml|vercel\.json|vite\.config\.[cm]?[jt]sx?|next\.config\.[cm]?[jt]s|nuxt\.config\.[cm]?[jt]s|astro\.config\.[cm]?[jt]s|angular\.json|svelte\.config\.[cm]?[jt]s|\.nvmrc|\.node-version|README(?:\.md)?|USAGE\.md|Makefile|\.env\.example)$)/i.test(path)
+  return /(^|\/)(package\.json|pnpm-lock\.yaml|yarn\.lock|package-lock\.json|bun\.lockb?|requirements\.txt|pyproject\.toml|poetry\.lock|pipfile|go\.mod|cargo\.toml|composer\.json|gemfile|dockerfile|docker-compose\.ya?ml|netlify\.toml|vercel\.json|vite\.config\.[cm]?[jt]sx?|next\.config\.[cm]?[jt]s|nuxt\.config\.[cm]?[jt]s|astro\.config\.[cm]?[jt]s|angular\.json|svelte\.config\.[cm]?[jt]s|\.nvmrc|\.node-version|README(?:\.md)?|USAGE\.md|Makefile|\.env\.example)$/i.test(path)
     || /(^|\/)(apps|packages|frontend|web|client|server|backend)\/package\.json$/i.test(path);
 };
 
