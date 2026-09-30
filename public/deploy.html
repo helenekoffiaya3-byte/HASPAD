@@ -11,7 +11,10 @@
 <div class="panel-head"><div><span class="eyebrow">ANALYSE AUTOMATIQUE</span><h3>Configuration du déploiement</h3><p>Le nom, la branche et surtout la commande sont déterminés à partir du dépôt. La commande est en lecture seule.</p></div></div>
 <div class="form-grid">
 <label>Nom<input id="projectName" readonly placeholder="Détection…"></label>
+<label>Cible<select id="runtimeTarget"><option value="netlify">Netlify</option><option value="docker">Docker / PaaS</option></select></label>
 <label>Commande<input id="buildCommand" readonly placeholder="ChatGPT analyse le dépôt…"></label>
+<label>Port Docker<input id="dockerPort" readonly placeholder="Auto-détection"></label>
+<label>Health check<input id="healthcheckPath" readonly placeholder="/health"></label>
 <label>Branche<select id="branchSelect"></select></label>
 </div>
 <div class="message" id="analysisStatus" role="status">Analyse du dépôt par ChatGPT…</div>
