@@ -16,6 +16,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          status=0
           mapfile -d '' files < <(find netlify/functions runtime/worker public/js -type f -name '*.js' -print0)
           if [ "${#files[@]}" -eq 0 ]; then
             echo "No JavaScript files found"
@@ -23,8 +24,9 @@ jobs:
           fi
           for file in "${files[@]}"; do
             echo "Checking $file"
-            node --check --input-type=module < "$file"
+            node --check --input-type=module < "$file" || { echo "::error file=$file::JavaScript syntax check failed"; status=1; }
           done
+          exit "$status"
       - name: Validate package JSON
         run: |
           node -e "for (const f of ['package.json','runtime/worker/package.json']) { JSON.parse(require('fs').readFileSync(f,'utf8')); console.log(f + ' OK') }"
