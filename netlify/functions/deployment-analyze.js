@@ -55,9 +55,11 @@ export default async (req) => {
   const owner = String(body?.repositoryOwner || "");
   const name = String(body?.repositoryName || "");
   const branch = String(body?.branch || "");
+  const targetRuntime = String(body?.targetRuntime || "netlify").toLowerCase();
   if (!siteId || !owner || !name || !branch) {
     return json(400, { error: "siteId, repositoryOwner, repositoryName et branch requis." });
   }
+  if (!["netlify","docker"].includes(targetRuntime)) return json(400, { error: "RUNTIME_TARGET_INVALID" });
 
   const site = (await admin.from("sites").select("id,user_id").eq("id", siteId).maybeSingle()).data;
   if (!site || String(site.user_id) !== String(user.id)) return json(403, { error: "Forbidden" });
@@ -72,7 +74,7 @@ export default async (req) => {
     const tree = await gh("/repos/" + encodeURIComponent(owner) + "/" + encodeURIComponent(name) +
       "/git/trees/" + encodeURIComponent(branch) + "?recursive=1", connection.token);
     const files = (tree.tree || []).filter(x => x.type === "blob" && x.path).map(x => x.path).filter(x => x.length <= 300);
-    const selected = files.filter(important).slice(0, 120);
+    const selected = files.filter(important).slice(0, 160);
     const rootFiles = new Set(files.filter(p => !p.includes("/")));
     const recognized = ["package.json","requirements.txt","pyproject.toml","Dockerfile","docker-compose.yml","docker-compose.yaml","index.html","go.mod","composer.json"].filter(x => rootFiles.has(x));
     if (tree.truncated) return json(422, { error: "REPOSITORY_TREE_TRUNCATED", deployable: false, blockers: ["L'arborescence GitHub est trop volumineuse pour une prévalidation sûre."] });
@@ -84,6 +86,7 @@ export default async (req) => {
     }
 
     const evidence = {
+      targetRuntime,
       repository: owner + "/" + name,
       branch,
       completeFileInventory: files,
@@ -101,6 +104,9 @@ Return ONLY JSON:
   "runtime": "node|python|docker|static|other",
   "baseDirectory": "string",
   "publishDirectory": "string",
+  "port": 3000,
+  "startCommand": "string|null",
+  "healthcheckPath": "/health",
   "confidence": "high|medium|low",
   "evidence": ["path: exact relevant evidence"],
   "notes": ["string"]
@@ -112,7 +118,7 @@ Rules:
 - Inspect netlify.toml when present; its build.command is authoritative unless repository structure proves it invalid.
 - For Next.js use the repository's actual package scripts/config, not a generic command if an explicit script exists.
 - For Python, inspect project metadata and documented build scripts; do not invent a build command when the project is runtime-only.
-- For Docker, report the repository's Docker build/start strategy; Netlify itself cannot execute arbitrary Docker hosting, so mark notes accordingly.
+- For Docker, inspect Dockerfile/Compose for EXPOSE, CMD/ENTRYPOINT, healthcheck, ports and start strategy. Report a concrete container port and healthcheck path when evidence exists. Never invent a port when no reliable evidence exists.
 - For static sites with no build step, command may be an empty string and commandRequired must be false.
 - Never invent a command solely from a framework name when repository evidence is available.
 - Do not include shell chaining, redirects, command substitution, destructive commands, secrets, or arbitrary user-provided commands.
@@ -140,16 +146,19 @@ Rules:
     result.analyzedImportantFiles = selected.length;
     const blockers = [];
     if (!result.runtime || result.runtime === "other") blockers.push("Type de projet non pris en charge automatiquement.");
-    if (["docker","docker-compose"].includes(String(result.runtime))) blockers.push("Le runtime Docker doit être envoyé vers une cible Docker, pas vers le build Netlify standard.");
+    if (targetRuntime === "netlify" && ["docker","docker-compose"].includes(String(result.runtime))) blockers.push("Le dépôt Docker doit être envoyé vers la cible Docker, pas vers le build Netlify standard.");
+    if (targetRuntime === "docker" && !["docker","docker-compose"].includes(String(result.runtime))) blockers.push("La cible Docker exige un Dockerfile ou docker-compose.yml/.yaml détecté à la racine.");
+    if (targetRuntime === "docker" && !rootFiles.has("Dockerfile") && !rootFiles.has("docker-compose.yml") && !rootFiles.has("docker-compose.yaml")) blockers.push("Aucun artefact Docker racine détecté.");
+    if (targetRuntime === "docker" && (!Number.isInteger(Number(result.port)) || Number(result.port) < 1 || Number(result.port) > 65535)) blockers.push("Aucun port Docker valide n'a été détecté.");
     if (result.commandRequired && !String(result.command || "").trim()) blockers.push("Aucune commande de build sûre n'a pu être déterminée.");
     if (result.confidence === "low") blockers.push("La détection de configuration est trop incertaine pour autoriser un déploiement automatique.");
     if (String(result.command || "").includes(".env")) blockers.push("La commande détectée ne doit pas référencer un fichier secret.");
-    result.preflight = { branchResolved: true, repositoryReadable: true, recognizedRootFiles: recognized, blockers, deployable: blockers.length === 0 };
+    result.preflight = { branchResolved: true, repositoryReadable: true, targetRuntime, recognizedRootFiles: recognized, blockers, deployable: blockers.length === 0 };
     result.deployable = result.preflight.deployable;
     if (result.deployable) {
       const secret = preflightSecret();
       if (!secret) return json(503, { error: "PREFLIGHT_SIGNING_NOT_CONFIGURED", deployable: false, blockers: ["La clé de signature du préflight n'est pas configurée. Aucun déploiement ne peut être autorisé."] });
-      const payload = JSON.stringify({u:String(user.id),s:siteId,o:owner,n:name,b:branch,c:String(result.command||""),bd:String(result.baseDirectory||""),pd:String(result.publishDirectory||""),t:Date.now()});
+      const payload = JSON.stringify({u:String(user.id),s:siteId,o:owner,n:name,b:branch,r:targetRuntime,c:String(result.command||""),bd:String(result.baseDirectory||""),pd:String(result.publishDirectory||""),p:String(result.port||""),h:String(result.healthcheckPath||"/"),t:Date.now()});
       const sig = crypto.createHmac("sha256", preflightSecret()).update(payload).digest("base64url");
       result.preflightToken = Buffer.from(payload).toString("base64url") + "." + sig;
     }
