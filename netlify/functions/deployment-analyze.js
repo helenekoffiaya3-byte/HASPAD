@@ -145,6 +145,23 @@ Rules:
     result.analyzedFiles = files.length;
     result.analyzedImportantFiles = selected.length;
     const blockers = [];
+    const dockerfile = String(contents["Dockerfile"] || "");
+    const compose = String(contents["docker-compose.yml"] || contents["docker-compose.yaml"] || "");
+    if (targetRuntime === "docker") {
+      if (!rootFiles.has("Dockerfile")) blockers.push("HASPAD Docker Runtime utilise un Dockerfile contrôlé; un compose seul n'est pas exécutable par cette cible.");
+      const dangerous = [
+        /--privileged\b/i,
+        /docker\.sock/i,
+        /network_mode\s*:\s*host/i,
+        /\bcap_add\s*:/i,
+        /SYS_ADMIN/i,
+        /SYS_PTRACE/i,
+        /\/var\/run\/docker\.sock/i
+      ];
+      if (dangerous.some(rx => rx.test(dockerfile) || rx.test(compose))) blockers.push("Configuration Docker privilégiée ou accès au socket Docker détecté.");
+      if (/^\s*(?:ENV|ARG)\s+[A-Za-z_][A-Za-z0-9_]*(?:KEY|TOKEN|SECRET|PASSWORD|PRIVATE)\s*=\s*[^$\s][^\s]*$/im.test(dockerfile)) blockers.push("Secret potentiellement intégré en clair dans Dockerfile (ENV/ARG).");
+      if (/^\s*VOLUME\s+.*\/var\/run\/docker\.sock/im.test(dockerfile)) blockers.push("Montage du socket Docker interdit.");
+    }
     if (!result.runtime || result.runtime === "other") blockers.push("Type de projet non pris en charge automatiquement.");
     if (targetRuntime === "netlify" && ["docker","docker-compose"].includes(String(result.runtime))) blockers.push("Le dépôt Docker doit être envoyé vers la cible Docker, pas vers le build Netlify standard.");
     if (targetRuntime === "docker" && !["docker","docker-compose"].includes(String(result.runtime))) blockers.push("La cible Docker exige un Dockerfile ou docker-compose.yml/.yaml détecté à la racine.");
