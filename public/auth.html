@@ -1,10 +1,39 @@
 <!doctype html>
-<html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Connexion — HASPAD.com</title><link rel="stylesheet" href="/css/style.css"></head>
-<body><main><h1>HASPAD.com</h1><section class="panel"><h2 id="title">Connexion</h2><form id="authForm"><input id="name" placeholder="Nom complet" autocomplete="name" hidden><input id="email" type="email" placeholder="Email" autocomplete="email" required><input id="password" type="password" placeholder="Mot de passe" autocomplete="current-password" required><input id="siteName" placeholder="Nom du premier site" hidden><button type="submit">Continuer</button></form><p id="message"></p><div class="actions"><button id="toggle" type="button">Créer un compte</button><button data-provider="google" type="button">Google</button><button data-provider="github" type="button">GitHub</button><button data-provider="gitlab" type="button">GitLab</button><button data-provider="bitbucket" type="button">Bitbucket</button></div><a href="/api/auth/forgot-password">Mot de passe oublié ?</a></section></main>
+<html lang="fr">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Connexion — HASPAD.com</title><link rel="stylesheet" href="/css/auth.css"></head>
+<body>
+<main class="auth-shell">
+<a class="brand" href="/">HASPAD.com</a>
+<section class="auth-card">
+<div class="eyebrow">Espace HASPAD</div><h1 id="title">Connexion</h1>
+<p class="subtitle">Accédez à votre espace de création et de gestion de sites.</p>
+<form id="authForm">
+<label id="nameField" hidden>Nom complet<input id="name" type="text" autocomplete="name"></label>
+<label>Email<input id="email" type="email" autocomplete="email" required></label>
+<label>Mot de passe<input id="password" type="password" autocomplete="current-password" minlength="10" required></label>
+<label id="siteField" hidden>Nom du premier site<input id="siteName" type="text" autocomplete="organization"></label>
+<button id="submit" class="primary" type="submit">Se connecter</button>
+</form>
+<p id="message" class="message" role="alert"></p>
+<div class="divider"><span>ou</span></div>
+<div class="sso">
+<button data-provider="google" type="button">Continuer avec Google</button>
+<button data-provider="github" type="button">Continuer avec GitHub</button>
+<button data-provider="gitlab" type="button">Continuer avec GitLab</button>
+<button data-provider="bitbucket" type="button">Continuer avec Bitbucket</button>
+</div>
+<button id="toggle" type="button">Créer un compte</button>
+<a class="forgot" href="/forgot-password.html">Mot de passe oublié ?</a>
+</section>
+</main>
 <script type="module">
-import {setSession} from "/js/auth.js";
-let register=false;const form=document.querySelector("#authForm"),title=document.querySelector("#title"),toggle=document.querySelector("#toggle"),message=document.querySelector("#message"),name=document.querySelector("#name"),site=document.querySelector("#siteName");
-toggle.onclick=()=>{register=!register;title.textContent=register?"Inscription":"Connexion";toggle.textContent=register?"J'ai déjà un compte":"Créer un compte";name.hidden=!register;site.hidden=!register;document.querySelector("#password").autocomplete=register?"new-password":"current-password";};
-form.onsubmit=async e=>{e.preventDefault();message.textContent="";const path=register?"/api/auth/register":"/api/auth/login";const body={email:document.querySelector("#email").value,password:document.querySelector("#password").value};if(register){body.fullName=name.value;body.siteName=site.value;}const r=await fetch(path,{method:"POST",headers:{"content-type":"application/json"},credentials:"include",body:JSON.stringify(body)});const d=await r.json().catch(()=>({}));if(!r.ok){message.textContent=d.error||"Erreur d'authentification.";return;}if(d.accessToken)setSession(d);message.textContent=d.emailVerificationRequired?"Vérifiez votre email pour activer le compte.":"Connexion réussie.";};
-document.querySelectorAll("[data-provider]").forEach(b=>b.onclick=()=>{location.href="/api/auth/oauth?provider="+encodeURIComponent(b.dataset.provider);});
-</script></body></html>
+import { initAuth, getUser, login, signup, oauthLogin } from "/js/auth.js";
+await initAuth();
+if (await getUser()) location.href="/dashboard.html";
+let register=false;
+const form=document.querySelector("#authForm"),title=document.querySelector("#title"),toggle=document.querySelector("#toggle"),message=document.querySelector("#message"),submit=document.querySelector("#submit"),nameField=document.querySelector("#nameField"),siteField=document.querySelector("#siteField"),name=document.querySelector("#name"),siteName=document.querySelector("#siteName"),email=document.querySelector("#email"),password=document.querySelector("#password");
+toggle.addEventListener("click",()=>{register=!register;title.textContent=register?"Inscription":"Connexion";submit.textContent=register?"Créer mon compte":"Se connecter";toggle.textContent=register?"J'ai déjà un compte":"Créer un compte";nameField.hidden=!register;siteField.hidden=!register;name.required=register;siteName.required=register;password.autocomplete=register?"new-password":"current-password";});
+form.addEventListener("submit",async event=>{event.preventDefault();submit.disabled=true;message.textContent="";try{if(register){await signup(email.value.trim(),password.value,{full_name:name.value.trim(),site_name:siteName.value.trim()||"Mon Premier Site"});message.textContent="Compte créé. Vérifiez votre e-mail si une confirmation est demandée.";}else{await login(email.value.trim(),password.value);location.href="/dashboard.html";}}catch(error){message.textContent=error?.message||"Erreur d'authentification."}finally{submit.disabled=false;}});
+document.querySelectorAll("[data-provider]").forEach(button=>button.addEventListener("click",()=>oauthLogin(button.dataset.provider)));
+</script>
+</body></html>
