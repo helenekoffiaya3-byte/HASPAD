@@ -4,6 +4,7 @@ import crypto from "crypto";
 import Anthropic from "@anthropic-ai/sdk";
 import { generateFrontendFiles } from "./aiService.js";
 import { githubConnection, pushFiles } from "./_github.js";
+import { runtimeRequest } from "./_runtime.js";
 
 const env = (name) => globalThis.Netlify?.env?.get?.(name) ?? process.env[name];
 const UUID = /^[0-9a-f-]{36}$/i;
@@ -17,7 +18,7 @@ function verifyPreflight(token, expected) {
     const payload = Buffer.from(enc,"base64url").toString("utf8");
     const actual = JSON.parse(payload);
     if (Date.now()-Number(actual.t) > 10*60*1000) return false;
-    for (const k of ["u","s","o","n","b"]) if (String(actual[k]) !== String(expected[k])) return false;
+    for (const k of ["u","s","o","n","b","r"]) if (String(actual[k]) !== String(expected[k])) return false;
     for (const k of ["c","bd","pd"]) if (String(actual[k]||"") !== String(expected[k]||"")) return false;
     const expectedSig = crypto.createHmac("sha256", preflightSecret()).update(payload).digest();
     const providedSig = Buffer.from(sig,"base64url");
@@ -196,20 +197,24 @@ export default async (req) => {
   const baseDirectory = String(b?.baseDirectory || "");
   const publishDirectory = String(b?.publishDirectory || "");
   const preflightToken = String(b?.preflightToken || "");
+  const targetRuntime = String(b?.targetRuntime || "netlify").toLowerCase();
+  const port = Number(b?.port || 0);
+  const healthcheckPath = String(b?.healthcheckPath || "/");
 
   if (!UUID.test(siteId) || !/^[A-Za-z0-9_.-]{1,100}$/.test(owner) || !/^[A-Za-z0-9_.-]{1,100}$/.test(name) ||
-      !/^[A-Za-z0-9._/-]{1,255}$/.test(branch) || command.length > 300 || (command && !SAFE_COMMAND.test(command))) {
+      !/^[A-Za-z0-9._/-]{1,255}$/.test(branch) || !["netlify","docker"].includes(targetRuntime) || command.length > 300 || (command && !SAFE_COMMAND.test(command)) || (targetRuntime === "docker" && (!Number.isInteger(port) || port < 1 || port > 65535)) || healthcheckPath.length > 200 || !healthcheckPath.startsWith("/")) {
     return json(400, { error: "Paramètres de déploiement invalides." });
   }
 
-  if (!verifyPreflight(preflightToken, {u:user.id,s:siteId,o:owner,n:name,b:branch,c:command,bd:baseDirectory,pd:publishDirectory})) {
+  if (!verifyPreflight(preflightToken, {u:user.id,s:siteId,o:owner,n:name,b:branch,r:targetRuntime,c:command,bd:baseDirectory,pd:publishDirectory,p:String(port || ""),h:healthcheckPath})) {
     return json(412, { error: "PREFLIGHT_REQUIRED_OR_EXPIRED", message: "Une prévalidation réussie et récente est obligatoire avant tout débit." });
   }
 
-  const site = (await admin.from("sites").select("id,user_id,netlify_site_id").eq("id", siteId).maybeSingle()).data;
+  const site = (await admin.from("sites").select("id,user_id,netlify_site_id,subdomain,custom_domain").eq("id", siteId).maybeSingle()).data;
   if (!site || String(site.user_id) !== String(user.id)) return json(403, { error: "Forbidden" });
-  if (!site.netlify_site_id) return json(503, { error: "Aucune cible Netlify n'est associée au projet." });
-  if (!env("NETLIFY_AUTH_TOKEN")) return json(503, { error: "NETLIFY_AUTH_TOKEN_NOT_CONFIGURED" });
+  if (targetRuntime === "netlify" && !site.netlify_site_id) return json(503, { error: "Aucune cible Netlify n'est associée au projet." });
+  if (targetRuntime === "netlify" && !env("NETLIFY_AUTH_TOKEN")) return json(503, { error: "NETLIFY_AUTH_TOKEN_NOT_CONFIGURED" });
+  if (targetRuntime === "docker" && !env("HASPAD_RUNTIME_URL")) return json(503, { error: "HASPAD_RUNTIME_URL_NOT_CONFIGURED" });
 
   const connection = await githubConnection(user.id);
   if (!connection?.token) return json(400, { error: "GITHUB_NOT_CONNECTED" });
@@ -221,17 +226,19 @@ export default async (req) => {
   if (active) return json(202, { success:true, reused:true, buildId:active.id, netlifyDeployId:active.netlify_deploy_id||null, status:active.status, message:"Un déploiement identique est déjà en cours. Aucun crédit supplémentaire n'est débité." });
 
   const preflightId = crypto.randomUUID();
+  const host = String(site.custom_domain || ((site.subdomain || "").replace(/[^A-Za-z0-9.-]/g, "") + "." + (env("HASPAD_SITE_DOMAIN") || "haspad.com"))).toLowerCase();
+  if (targetRuntime === "docker" && !/^(?=.{1,253}$)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/.test(host)) return json(422,{error:"DOCKER_HOST_INVALID"});
   let creditedBuildId = null;
   let netlifyAccepted = false;
 
   try {
     // Phase 1: prévalidation + agents. Aucun crédit n'est débité et aucun build Netlify n'est lancé.
-    const agents = await runThreeAgents({ user, buildId: preflightId, siteId, owner, name, branch, command });
+    const agents = targetRuntime === "netlify" ? await runThreeAgents({ user, buildId: preflightId, siteId, owner, name, branch, command }) : { skipped: "docker-source-is-immutable-after-preflight" };
 
-    // Phase 2: configuration Netlify. Toujours aucun crédit débité.
-    await ensureDeployFailureHook(site.netlify_site_id);
-    const current = await netlify("https://api.netlify.com/api/v1/sites/" + encodeURIComponent(site.netlify_site_id));
-    const existing = current.build_settings || current.repo || {};
+    // Phase 2: configuration de la cible. Aucun crédit n'est débité.
+    if (targetRuntime === "netlify") await ensureDeployFailureHook(site.netlify_site_id);
+    const current = targetRuntime === "netlify" ? await netlify("https://api.netlify.com/api/v1/sites/" + encodeURIComponent(site.netlify_site_id)) : null;
+    const existing = current?.build_settings || current?.repo || {};
     const repoPath = owner + "/" + name;
     const repoUrl = "https://github.com/" + owner + "/" + name;
     const buildSettings = {
@@ -254,7 +261,7 @@ export default async (req) => {
     const referenceId = crypto.randomUUID();
     const allocationResult = await admin.rpc("consume_credits_and_create_build_v2", {
       p_user_id:user.id, p_site_id:siteId, p_cost:cost, p_reference_id:referenceId,
-      p_git_provider:"github", p_repository_owner:owner, p_repository_name:name, p_branch:branch
+      p_git_provider:targetRuntime === "docker" ? "github-docker" : "github", p_repository_owner:owner, p_repository_name:name, p_branch:branch
     });
     if (allocationResult.error) return json(500, {error:"Transaction de déploiement impossible."});
     const allocation = allocationResult.data;
@@ -270,6 +277,27 @@ export default async (req) => {
       status:"building", triggered_at:new Date().toISOString(), updated_at:new Date().toISOString()
     }).eq("id",creditedBuildId).eq("status","pending");
 
+    if (targetRuntime === "docker") {
+      const runtime = await runtimeRequest("/v1/deploy", {
+        projectId: creditedBuildId,
+        runtimeId: creditedBuildId,
+        repositoryOwner: owner,
+        repositoryName: name,
+        branch,
+        githubToken: connection.token,
+        host,
+        port,
+        healthcheckPath,
+        dockerfilePath: "Dockerfile"
+      }, "POST");
+      netlifyAccepted = true;
+      const savedRuntime = await admin.from("project_builds").update({
+        status:"success", updated_at:new Date().toISOString(), deploy_url:runtime.publicUrl||null
+      }).eq("id",creditedBuildId).eq("status","building").select("id").maybeSingle();
+      if (savedRuntime.error) throw new Error("RUNTIME_ACCEPTED_DB_SYNC_FAILED");
+      return json(202,{success:true,buildId:creditedBuildId,runtimeId:creditedBuildId,targetRuntime:"docker",host,publicUrl:runtime.publicUrl||null,health:runtime.health||null,remainingCredits:allocation.remaining_credits});
+    }
+
     // L'unique appel de lancement Netlify est ici.
     const build = await netlify(
       "https://api.netlify.com/api/v1/sites/" + encodeURIComponent(site.netlify_site_id) +
@@ -281,7 +309,6 @@ export default async (req) => {
     const savedBuild = await admin.from("project_builds").update({
       status:"building", updated_at:new Date().toISOString(), netlify_deploy_id:build.deploy_id||null
     }).eq("id",creditedBuildId).select("id").maybeSingle();
-    if (savedBuild.error) throw new Error("NETLIFY_ACCEPTED_DB_SYNC_FAILED");
 
     return json(202, {
       success:true, buildId:creditedBuildId, netlifyBuildId:build.id, netlifyDeployId:build.deploy_id||null,
