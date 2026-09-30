@@ -45,7 +45,7 @@ export default async (req) => {
     return json(404, { error: "BUILD_NOT_FOUND" });
   }
 
-  const apiKey = env("OPENAI_API_KEY");
+  const apiKey = env("CHATGPT_API_KEY") || env("OPENAI_API_KEY");
   const baseURL = env("OPENAI_BASE_URL");
   if (!apiKey) return json(503, { error: "CHATGPT_GATEWAY_NOT_READY" });
 
