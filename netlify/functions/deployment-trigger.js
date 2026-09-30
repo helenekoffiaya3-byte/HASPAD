@@ -257,7 +257,9 @@ export default async (req) => {
     });
 
     // Phase 3: débit atomique immédiatement avant le lancement réel du build Netlify.
-    const cost = Math.max(1, Number(env("GIT_DEPLOY_CREDIT_COST") || 300));
+    const configuredCost = Number(env("GIT_DEPLOY_CREDIT_COST") || 300);
+    if (!Number.isInteger(configuredCost) || configuredCost <= 0) return json(503,{error:"GIT_DEPLOY_CREDIT_COST_INVALID"});
+    const cost = configuredCost;
     const referenceId = crypto.randomUUID();
     const allocationResult = await admin.rpc("consume_credits_and_create_build_v2", {
       p_user_id:user.id, p_site_id:siteId, p_cost:cost, p_reference_id:referenceId,
