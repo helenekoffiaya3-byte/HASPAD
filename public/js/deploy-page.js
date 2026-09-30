@@ -1,1 +1,77 @@
-import{api,logout}from"./auth.js";const $=s=>document.querySelector(s);let siteId=null;async function load(){const me=await api("/api/auth-me");if(!me.ok){location.href="/connexion.html";return}const r=await api("/api/editor-sites");if(!r.ok)return;const sites=(await r.json()).sites||[];siteId=sites[0]?.id||null}$("#detectProject").addEventListener("click",async()=>{if(!siteId){$("#deploymentResult").textContent="Aucun projet disponible.";return}$("#deploymentResult").textContent="Analyse en cours…";const r=await api("/api/project-analyze",{method:"POST",body:JSON.stringify({siteId})});const d=await r.json().catch(()=>({}));$("#deploymentResult").textContent=r.ok?JSON.stringify(d,null,2):(d.error||"Analyse impossible.");});$("#logout")?.addEventListener("click",logout);load();
+import { api, logout } from "./auth.js";
+
+const $ = (s) => document.querySelector(s);
+const params = new URLSearchParams(location.search);
+const siteId = params.get("siteId");
+const repo = params.get("repo") || "";
+const initialBranch = params.get("branch") || "main";
+const [owner, name] = repo.split("/");
+let analysis = null;
+
+function msg(text) { $("#analysisStatus").textContent = text; }
+function setDeploy(text) { $("#deployStatus").textContent = text; }
+
+async function loadBranches() {
+  if (!siteId || !repo) return;
+  const r = await api("/api/git-branches?repo=" + encodeURIComponent(repo));
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(d.error || "Impossible de charger les branches.");
+  const select = $("#branchSelect");
+  select.innerHTML = (d.branches || []).map(x =>
+    "<option value=\"" + String(x.name).replace(/"/g, "&quot;") + "\">" + x.name + "</option>"
+  ).join("");
+  if ([...select.options].some(o => o.value === initialBranch)) select.value = initialBranch;
+}
+
+async function analyze() {
+  if (!siteId || !owner || !name) {
+    msg("Dépôt ou projet manquant. Revenez à GitHub / Netlify.");
+    return;
+  }
+  msg("ChatGPT inspecte le dépôt et détermine la commande exacte…");
+  const branch = $("#branchSelect").value || initialBranch;
+  const r = await api("/api/deployment-analyze", {
+    method: "POST",
+    body: JSON.stringify({ siteId, repositoryOwner: owner, repositoryName: name, branch })
+  });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(d.error || "Analyse impossible.");
+  analysis = d;
+  $("#projectName").value = d.name || name;
+  $("#buildCommand").value = d.commandRequired === false ? "Aucune commande de build nécessaire" : (d.command || "");
+  $("#evidence").textContent = (d.evidence || []).join("\n") || "Aucune preuve textuelle fournie.";
+  msg("Commande détectée par ChatGPT · " + (d.framework || d.runtime || "projet détecté"));
+  $("#deployButton").disabled = false;
+}
+
+$("#branchSelect").addEventListener("change", () => { analysis = null; $("#deployButton").disabled = true; analyze().catch(e => msg(e.message)); });
+
+$("#deployButton").addEventListener("click", async () => {
+  if (!analysis) return;
+  $("#deployButton").disabled = true;
+  setDeploy("Préparation du déploiement…");
+  try {
+    const branch = $("#branchSelect").value;
+    const r = await api("/api/deployment-trigger", {
+      method: "POST",
+      body: JSON.stringify({
+        siteId, repositoryOwner: owner, repositoryName: name, branch,
+        command: analysis.command || "",
+        baseDirectory: analysis.baseDirectory || "",
+        publishDirectory: analysis.publishDirectory || ""
+      })
+    });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.error || "Déploiement échoué.");
+    setDeploy("Déploiement lancé. Build ID : " + (d.buildId || "—"));
+  } catch (e) {
+    setDeploy(e.message);
+    $("#deployButton").disabled = false;
+  }
+});
+
+$("#logout")?.addEventListener("click", logout);
+(async () => {
+  try { await loadBranches(); await analyze(); }
+  catch (e) { msg(e.message); }
+})();
