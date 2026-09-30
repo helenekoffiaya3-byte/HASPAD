@@ -1,9 +1,11 @@
 import { getUser } from "@netlify/identity";
 import { admin, json } from "./_credits.js";
 import { githubConnection } from "./_github.js";
+import crypto from "crypto";
 
 const env = (name) => globalThis.Netlify?.env?.get?.(name) ?? process.env[name];
 const GH = "https://api.github.com";
+const preflightSecret = () => env("GITHUB_OAUTH_STATE_SECRET") || env("NETLIFY_WEBHOOK_SECRET") || "";
 
 async function gh(path, token) {
   const r = await fetch(GH + path, {
@@ -144,6 +146,11 @@ Rules:
     if (String(result.command || "").includes(".env")) blockers.push("La commande détectée ne doit pas référencer un fichier secret.");
     result.preflight = { branchResolved: true, repositoryReadable: true, recognizedRootFiles: recognized, blockers, deployable: blockers.length === 0 };
     result.deployable = result.preflight.deployable;
+    if (result.deployable) {
+      const payload = JSON.stringify({u:String(user.id),s:siteId,o:owner,n:name,b:branch,c:String(result.command||""),bd:String(result.baseDirectory||""),pd:String(result.publishDirectory||""),t:Date.now()});
+      const sig = crypto.createHmac("sha256", preflightSecret()).update(payload).digest("base64url");
+      result.preflightToken = Buffer.from(payload).toString("base64url") + "." + sig;
+    }
 
     await admin.from("ai_activity_logs").insert({
       site_id: siteId,
