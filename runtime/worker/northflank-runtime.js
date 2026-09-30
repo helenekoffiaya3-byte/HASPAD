@@ -109,7 +109,15 @@ export async function getRuntimeStatus(runtimeId) {
   return result;
 }
 
-export async function getLogs() { throw new Error("NORTHFLANK_LOGS_NOT_IMPLEMENTED"); }
+export async function getLogs(runtimeId) {
+  const rid = clean(runtimeId, 54);
+  const projectId = required("NORTHFLANK_PROJECT_ID");
+  const service = await findService(rid);
+  if (!service) throw new Error("RUNTIME_NOT_FOUND");
+  const data = await nfRequest("/projects/" + encodeURIComponent(projectId) + "/services/" + encodeURIComponent(service.id) + "/logs?type=runtime&lineLimit=500&direction=backward");
+  const logs = Array.isArray(data) ? data : [];
+  return { runtimeId: rid, provider: "northflank", logs: logs.map((entry) => ({ ts: entry.ts, log: entry.log })) };
+}
 
 export async function rollback(body) {
   if (!body?.runtimeId) throw new Error("runtimeId_REQUIRED");
@@ -121,7 +129,7 @@ export async function restartRuntime(runtimeId) {
   const projectId = required("NORTHFLANK_PROJECT_ID");
   const service = await findService(rid);
   if (!service) throw new Error("RUNTIME_NOT_FOUND");
-  const data = await nfRequest("/projects/" + encodeURIComponent(projectId) + "/services/" + encodeURIComponent(service.id) + "/build", { method: "POST", body: JSON.stringify({ branch: "main" }) });
+  const data = await nfRequest("/projects/" + encodeURIComponent(projectId) + "/services/" + encodeURIComponent(service.id) + "/build", { method: "POST", body: JSON.stringify({ branch: service?.vcsData?.projectBranch || "main" }) });
   return { success: true, runtimeId: rid, provider: "northflank", status: "building", buildId: data?.id || null };
 }
 
