@@ -352,6 +352,18 @@ export default async (req) => {
 
   const buildId = allocation.build_id;
 
+  if (allocation.reused || allocation.idempotent) {
+    return json(202, {
+      success: true,
+      reused: true,
+      buildId,
+      status: allocation.status || "building",
+      message: "Un déploiement identique est déjà en cours. Aucun nouveau crédit n'a été débité."
+    });
+  }
+
+  let netlifyAccepted = false;
+
   try {
     const agents = await runThreeAgents({
       user,
@@ -392,6 +404,12 @@ export default async (req) => {
       }
     );
 
+    await admin.from("project_builds").update({
+      status: "building",
+      triggered_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    }).eq("id", buildId).eq("status", "pending");
+
     const build = await netlify(
       "https://api.netlify.com/api/v1/sites/" +
       encodeURIComponent(site.netlify_site_id) +
@@ -401,13 +419,14 @@ export default async (req) => {
       encodeURIComponent("HASPAD " + owner + "/" + name),
       { method: "POST", body: JSON.stringify({}) }
     );
+    netlifyAccepted = true;
 
-    await admin.from("project_builds").update({
+    const savedBuild = await admin.from("project_builds").update({
       status: "building",
-      triggered_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
       netlify_deploy_id: build.deploy_id || null
-    }).eq("id", buildId);
+    }).eq("id", buildId).select("id").maybeSingle();
+    if (savedBuild.error) throw new Error("NETLIFY_ACCEPTED_DB_SYNC_FAILED");
 
     return json(202, {
       success: true,
@@ -419,11 +438,22 @@ export default async (req) => {
       agents
     });
   } catch (error) {
-    await admin.rpc("fail_build_and_refund", {
-      p_build_id: buildId,
-      p_error: String(error?.message || "DEPLOYMENT_FAILED").slice(0, 1000)
-    });
+    if (!netlifyAccepted) {
+      await admin.rpc("fail_build_and_refund", {
+        p_build_id: buildId,
+        p_error: String(error?.message || "DEPLOYMENT_FAILED").slice(0, 1000)
+      });
+    } else {
+      await admin.from("project_builds").update({
+        error_message: String(error?.message || "DEPLOY_POST_ACCEPTANCE_ERROR").slice(0, 1000),
+        updated_at: new Date().toISOString()
+      }).eq("id", buildId);
+    }
     console.error("deployment-trigger", error?.message || error);
-    return json(502, { error: "Le déploiement a échoué. Les crédits ont été remboursés." });
+    return json(502, {
+      error: netlifyAccepted
+        ? "Netlify a accepté le déploiement; le suivi reste actif et aucun remboursement prématuré n'a été effectué."
+        : "Le déploiement a échoué. Les crédits ont été remboursés."
+    });
   }
 };
