@@ -39,15 +39,21 @@ async function analyze() {
   analysis = d;
   $("#projectName").value = d.name || name;
   $("#buildCommand").value = d.commandRequired === false ? "Aucune commande de build nécessaire" : (d.command || "");
+  const blockers = d.preflight?.blockers || [];
   $("#evidence").textContent = (d.evidence || []).join("\n") || "Aucune preuve textuelle fournie.";
-  msg("Commande détectée par ChatGPT · " + (d.framework || d.runtime || "projet détecté"));
+  if (blockers.length) {
+    msg("Déploiement bloqué avant tout débit : " + blockers.join(" "));
+    $("#deployButton").disabled = true;
+    return;
+  }
+  msg("Prévalidation réussie · aucun crédit débité · " + (d.framework || d.runtime || "projet détecté"));
   $("#deployButton").disabled = false;
 }
 
 $("#branchSelect").addEventListener("change", () => { analysis = null; $("#deployButton").disabled = true; analyze().catch(e => msg(e.message)); });
 
 $("#deployButton").addEventListener("click", async () => {
-  if (!analysis) return;
+  if (!analysis || analysis.deployable !== true || analysis.preflight?.deployable !== true) return;
   $("#deployButton").disabled = true;
   setDeploy("Préparation du déploiement…");
   try {
