@@ -185,7 +185,7 @@ async function runThreeAgents({ user, buildId, siteId, owner, name, branch, comm
 
 export default async (req) => {
   if (req.method !== "POST") return json(405, { error: "Method Not Allowed" });
-  const user = await getUser();
+  const user = await getUser(req);
   if (!user) return json(401, { error: "Unauthorized" });
 
   const b = await req.json().catch(() => null);
