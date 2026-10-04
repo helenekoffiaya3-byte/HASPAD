@@ -4,7 +4,7 @@ import crypto from "crypto";
 import Anthropic from "@anthropic-ai/sdk";
 import { generateFrontendFiles } from "./aiService.js";
 import { githubConnection, pushFiles } from "./_github.js";
-import { runtimeRequest } from "./_runtime.js";
+import { deployNorthflank, northflankStatus } from "./northflank-runtime.js";
 
 const env = (name) => globalThis.Netlify?.env?.get?.(name) ?? process.env[name];
 const UUID = /^[0-9a-f-]{36}$/i;
@@ -214,7 +214,7 @@ export default async (req) => {
   if (!site || String(site.user_id) !== String(user.id)) return json(403, { error: "Forbidden" });
   if (targetRuntime === "netlify" && !site.netlify_site_id) return json(503, { error: "Aucune cible Netlify n'est associée au projet." });
   if (targetRuntime === "netlify" && !env("NETLIFY_AUTH_TOKEN")) return json(503, { error: "NETLIFY_AUTH_TOKEN_NOT_CONFIGURED" });
-  if (targetRuntime === "docker" && !env("HASPAD_RUNTIME_URL")) return json(503, { error: "HASPAD_RUNTIME_URL_NOT_CONFIGURED" });
+  if (targetRuntime === "docker" && (!env("NORTHFLANK_API_TOKEN") || !env("NORTHFLANK_PROJECT_ID") || !env("NORTHFLANK_DEPLOYMENT_PLAN") || !env("NORTHFLANK_BUILD_PLAN"))) return json(503, { error: "NORTHFLANK_RUNTIME_NOT_CONFIGURED" });
 
   const connection = await githubConnection(user.id);
   if (!connection?.token) return json(400, { error: "GITHUB_NOT_CONNECTED" });
