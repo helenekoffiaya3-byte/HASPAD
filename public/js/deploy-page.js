@@ -7,10 +7,57 @@ const repo = params.get("repo") || "";
 const initialBranch = params.get("branch") || "main";
 const [owner, name] = repo.split("/");
 let analysis = null;
-const runtimeTarget = () => $("#runtimeTarget").value || "netlify";
+let activeBuildId = null;
+let pollTimer = null;
 
+const runtimeTarget = () => $("#runtimeTarget").value || "netlify";
 function msg(text) { $("#analysisStatus").textContent = text; }
 function setDeploy(text) { $("#deployStatus").textContent = text; }
+
+function stopPolling() {
+  if (pollTimer) clearTimeout(pollTimer);
+  pollTimer = null;
+}
+
+function renderBuildState(d) {
+  const build = d.build || {};
+  const status = String(build.status || "").toLowerCase();
+  const runtime = d.runtime || {};
+  const runtimeState = String(runtime.status || runtime.state || "").toLowerCase();
+  const url = build.deploy_url || runtime.publicUrl || runtime.url || "";
+
+  if (status === "success" || runtimeState === "running" || runtimeState === "ready") {
+    setDeploy(url ? "Déploiement réussi · " + url : "Déploiement réussi.");
+    $("#deployButton").disabled = false;
+    stopPolling();
+    return true;
+  }
+
+  if (status === "failed" || ["failed","error","canceled","cancelled"].includes(runtimeState)) {
+    setDeploy("Déploiement échoué" + (build.error_message ? " : " + build.error_message : "."));
+    $("#deployButton").disabled = false;
+    stopPolling();
+    return true;
+  }
+
+  setDeploy("Déploiement en cours…" + (status ? " · " + status : ""));
+  $("#deployButton").disabled = true;
+  return false;
+}
+
+async function pollDeployment(buildId) {
+  activeBuildId = buildId;
+  stopPolling();
+  try {
+    const r = await api("/api/deployment-status?buildId=" + encodeURIComponent(buildId));
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.error || "Impossible de lire le statut du déploiement.");
+    if (!renderBuildState(d)) pollTimer = setTimeout(() => pollDeployment(buildId), 3000);
+  } catch (e) {
+    setDeploy("Statut temporairement indisponible : " + e.message);
+    pollTimer = setTimeout(() => pollDeployment(buildId), 5000);
+  }
+}
 
 async function loadBranches() {
   if (!siteId || !repo) return;
@@ -29,6 +76,7 @@ async function analyze() {
     msg("Dépôt ou projet manquant. Revenez à GitHub / Netlify.");
     return;
   }
+  stopPolling();
   msg("ChatGPT inspecte le dépôt et détermine la commande exacte…");
   const branch = $("#branchSelect").value || initialBranch;
   const targetRuntime = runtimeTarget();
@@ -43,8 +91,8 @@ async function analyze() {
   $("#buildCommand").value = d.commandRequired === false ? "Aucune commande de build nécessaire" : (d.command || "");
   $("#dockerPort").value = d.port || "";
   $("#healthcheckPath").value = d.healthcheckPath || "/";
-  const blockers = d.preflight?.blockers || [];
   $("#evidence").textContent = (d.evidence || []).join("\n") || "Aucune preuve textuelle fournie.";
+  const blockers = d.preflight?.blockers || [];
   if (blockers.length) {
     msg("Déploiement bloqué avant tout débit : " + blockers.join(" "));
     $("#deployButton").disabled = true;
@@ -58,7 +106,7 @@ $("#branchSelect").addEventListener("change", () => { analysis = null; $("#deplo
 $("#runtimeTarget").addEventListener("change", () => { analysis = null; $("#deployButton").disabled = true; analyze().catch(e => msg(e.message)); });
 
 $("#deployButton").addEventListener("click", async () => {
-  if (!analysis || analysis.deployable !== true || analysis.preflight?.deployable !== true) return;
+  if (!analysis || analysis.deployable !== true || analysis.preflight?.deployable !== true || activeBuildId) return;
   $("#deployButton").disabled = true;
   setDeploy("Préparation du déploiement…");
   try {
@@ -71,7 +119,6 @@ $("#deployButton").addEventListener("click", async () => {
         command: analysis.command || "",
         port: Number(analysis.port || 0),
         healthcheckPath: analysis.healthcheckPath || "/",
-
         baseDirectory: analysis.baseDirectory || "",
         publishDirectory: analysis.publishDirectory || "",
         preflightToken: analysis.preflightToken || ""
@@ -79,14 +126,20 @@ $("#deployButton").addEventListener("click", async () => {
     });
     const d = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error(d.error || "Déploiement échoué.");
-    setDeploy("Déploiement lancé. Build ID : " + (d.buildId || "—"));
+    const buildId = d.buildId;
+    if (!buildId) throw new Error("BUILD_ID_MISSING");
+    setDeploy("Déploiement lancé · suivi automatique… Build ID : " + buildId);
+    await pollDeployment(buildId);
   } catch (e) {
     setDeploy(e.message);
+    activeBuildId = null;
     $("#deployButton").disabled = false;
   }
 });
 
 $("#logout")?.addEventListener("click", logout);
+window.addEventListener("beforeunload", stopPolling);
+
 (async () => {
   try { await loadBranches(); await analyze(); }
   catch (e) { msg(e.message); }
