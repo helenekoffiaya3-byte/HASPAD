@@ -24,3 +24,9 @@ build/
 
 # Runtime certificates and state
 runtime/letsencrypt/
+
+# Netlify / Cloudflare local state
+.netlify/
+.wrangler/
+.dev.vars
+.envrc
