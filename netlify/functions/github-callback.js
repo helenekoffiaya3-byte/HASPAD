@@ -3,7 +3,7 @@ import { saveGithubConnection, parseCookies, verifyState } from "./_github.js";
 
 export default async (req) => {
   if (req.method !== "GET") return new Response("Method Not Allowed", { status: 405 });
-  const user = await getUser();
+  const user = await getUser(req);
   if (!user) return new Response("Session HASPAD absente ou expirée.", { status: 401 });
   const url = new URL(req.url);
   if (url.searchParams.get("error")) return Response.redirect(new URL("/dashboard.html?github=error", url).toString(), 302);
