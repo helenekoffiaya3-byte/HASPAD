@@ -6,56 +6,74 @@ HASPAD est une plateforme SaaS de création, correction et déploiement de sites
 
 - Site public: https://haspad.com
 - API publique: https://haspad.com/api
-- Netlify: hébergement/déploiement.
-- Supabase: PostgreSQL, RLS et temps réel; l'identité applicative visible est gérée par Netlify Identity.
+- Hébergement et déploiement Netlify pour les projets compatibles Netlify.
+- Netlify Identity est le système d'authentification applicative.
+- La base applicative utilise l'infrastructure Netlify Database; aucune dépendance Supabase n'est requise.
+
+## Sécurité de déploiement
+
+Le flux GitHub est strictement séparé en deux phases:
+
+1. **Analyse / preflight**: lecture du dépôt, détection du framework, runtime, commande, répertoire de publication, port et variables requises. Cette phase ne débite aucun crédit et ne lance aucun build Netlify.
+2. **Deploy explicite**: le déploiement n'est lancé qu'après validation du preflight et clic explicite sur Deploy.
+
+La commande de build est détectée côté serveur à partir du dépôt; elle n'est pas saisie manuellement par l'utilisateur.
+
+Les secrets OAuth, API et runtime restent côté serveur. Ne jamais les exposer au navigateur, les committer dans Git ou les inclure dans les fichiers générés.
+
+## Variables critiques
+
+Les variables de production doivent être configurées dans **Netlify → Site configuration → Environment variables**.
+
+Variables GitHub OAuth:
+
+- `GITHUB_CLIENT_ID`
+- `GITHUB_CLIENT_SECRET`
+- `GITHUB_OAUTH_REDIRECT_URI=https://haspad.com/.netlify/functions/github-callback`
+- `GITHUB_OAUTH_STATE_SECRET`
+- `GITHUB_TOKEN_ENCRYPTION_KEY`
+- `GITHUB_API_VERSION=2022-11-28`
+
+IA:
+
+- `OPENAI_API_KEY` — serveur uniquement.
+- `CHATGPT_MODEL` — modèle utilisé par l'analyseur, si défini.
+
+Déploiement:
+
+- `NETLIFY_AUTH_TOKEN` — serveur uniquement.
+- `GIT_DEPLOY_CREDIT_COST=300`.
+
+Paiement:
+
+- PayDunya est le prestataire activé côté serveur.
+- Les secrets PayDunya sont serveur uniquement.
+- Les crédits ne sont attribués qu'après confirmation serveur vérifiée.
+
+## Crédits
+
+Le coût du déploiement Git est **300 crédits**.
+
+Le débit doit être atomique et idempotent. Aucun débit ne doit avoir lieu pendant l'analyse ou lorsque le preflight échoue. Un même déploiement ne doit jamais être débité deux fois. Lorsqu'un déploiement échoue avant son acceptation par la cible, le mécanisme serveur prévu doit pouvoir effectuer un remboursement idempotent.
 
 ## Authentification
 
 - Email / mot de passe via Netlify Identity.
-- Google, GitHub, GitLab et Bitbucket via les fournisseurs externes Netlify Identity.
-- Une table de liaison serveur associe chaque identité Netlify aux données historiques Supabase sans exposer Supabase Auth au navigateur.
-- Les callbacks de production doivent utiliser `https://haspad.com`.
-- Ne jamais exposer `SUPABASE_SERVICE_ROLE_KEY` ou les secrets OAuth au navigateur.
+- La session utilisateur est vérifiée côté serveur.
+- L'identité Netlify détermine l'utilisateur autorisé à accéder à ses projets.
+- Les tokens GitHub sont chiffrés côté serveur.
+- GitLab et Bitbucket restent en pause et ne doivent pas être réactivés sans décision explicite.
 
-## Crédits
+## Base Studio
 
-- 500 crédits offerts à l'inscription.
-- Déploiement initial: 390 crédits.
-- Redéploiement: 150 crédits.
-- Pro: 6 800 crédits.
-- Business: 19 089 crédits.
-
-Le débit des crédits est atomique dans PostgreSQL. Une erreur de compilation après débit déclenche un remboursement serveur.
-
-## Paiements
-
-PayDunya est le prestataire de paiement activé côté serveur. Les montants XOF et les crédits sont déterminés côté serveur; les crédits ne sont attribués qu'après confirmation PayDunya vérifiée.
-
-## Base de données
-
-Appliquer `supabase/credits.sql` dans le SQL Editor Supabase avant d'activer la facturation.
-
-Les tables de crédits et de paiement ont RLS. Les fonctions privilégiées sont réservées à `service_role`.
+Base Studio est une couche fonctionnelle distincte d'une base de données classique. Son interface et ses opérations doivent rester séparées du stockage applicatif.
 
 ## Domaine
 
-Le dépôt gère la vérification RDAP et l'enregistrement de la configuration du domaine. L'achat/enregistrement auprès d'un registrar n'est pas activé tant qu'un prestataire de paiement et un adaptateur registrar n'ont pas été configurés.
+Le dépôt gère la vérification RDAP et la configuration du domaine. L'achat/enregistrement auprès d'un registrar n'est pas considéré comme opérationnel tant que l'adaptateur registrar et son paiement serveur ne sont pas validés.
 
-Dans Netlify, le domaine personnalisé doit être rattaché au site `haspad-ai`, puis le DNS doit pointer vers Netlify. Le sous-domaine `api.haspad.com` doit également être configuré vers l'infrastructure qui exécute les fonctions API.
+## Développement local
 
-## Offre Startup
+Copier `.env.example` vers `.env` uniquement pour le développement local et renseigner les secrets hors Git.
 
-- 4 000 crédits.
-- Centre de contrôle logique isolé par projet.
-- Métriques serveur, erreurs, pages, composants, recommandations et journal des agents.
-- Agent Gemini 3.8 Flash configurable par `GEMINI_MODEL`.
-- L'agent reçoit une demande et retourne un **blueprint JSON validé**, jamais du SQL arbitraire exécutable.
-- GitHub, GitLab et Bitbucket restent des intégrations distinctes; leurs secrets ne sont jamais exposés au navigateur.
-
-### Sécurité des crédits
-
-Le débit utilise un verrou PostgreSQL `FOR UPDATE` dans une fonction `SECURITY DEFINER` avec `search_path = ''`. Les remboursements sont idempotents grâce à la référence unique de transaction. Le navigateur ne fournit jamais le `user_id` de facturation: le serveur vérifie le cookie JWT Netlify Identity puis résout l'identité vers l'utilisateur Supabase interne.
-
-### Centre de contrôle
-
-Appliquer `supabase/control_center.sql` après le schéma principal. RLS est activé sur les tables exposées et l'accès est limité aux membres du projet.
+**Ne jamais committer `.env`, les clés privées, les tokens OAuth ou les certificats.**
