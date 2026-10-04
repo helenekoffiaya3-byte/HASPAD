@@ -7,6 +7,7 @@ HASPAD est une plateforme SaaS de création, correction et déploiement de sites
 - Site public: https://haspad.com
 - API publique: https://haspad.com/api
 - Hébergement et déploiement Netlify pour les projets compatibles Netlify.
+- Déploiement Docker managé via Northflank pour les projets contenant un Dockerfile.
 - Netlify Identity est le système d'authentification applicative.
 - La base applicative utilise l'infrastructure Netlify Database; aucune dépendance Supabase n'est requise.
 
@@ -18,6 +19,8 @@ Le flux GitHub est strictement séparé en deux phases:
 2. **Deploy explicite**: le déploiement n'est lancé qu'après validation du preflight et clic explicite sur Deploy.
 
 La commande de build est détectée côté serveur à partir du dépôt; elle n'est pas saisie manuellement par l'utilisateur.
+
+Pour la cible Docker, HASPAD délègue le build et le déploiement au service managé Northflank à partir du dépôt GitHub et du Dockerfile validés au preflight.
 
 Les secrets OAuth, API et runtime restent côté serveur. Ne jamais les exposer au navigateur, les committer dans Git ou les inclure dans les fichiers générés.
 
@@ -43,6 +46,16 @@ Déploiement:
 
 - `NETLIFY_AUTH_TOKEN` — serveur uniquement.
 - `GIT_DEPLOY_CREDIT_COST=300`.
+
+Northflank Docker:
+
+- `NORTHFLANK_API_TOKEN` — serveur uniquement.
+- `NORTHFLANK_PROJECT_ID` — projet Northflank cible.
+- `NORTHFLANK_DEPLOYMENT_PLAN` — plan de déploiement explicitement choisi.
+- `NORTHFLANK_BUILD_PLAN` — plan de build explicitement choisi.
+- `NORTHFLANK_GITHUB_ACCOUNT_LOGIN` — compte GitHub lié à Northflank, si requis pour les dépôts privés.
+
+Le backend HASPAD appelle directement l'API Northflank. Aucun token Northflank n'est envoyé au navigateur.
 
 Paiement:
 
