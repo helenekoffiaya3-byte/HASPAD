@@ -79,7 +79,7 @@ export default async req=>{
 
   if(!build.netlify_deploy_id && !["success","failed"].includes(String(build.status))){
     try{
-      runtime=await runtimeRequest("/v1/status/"+encodeURIComponent(id),{},"GET");
+      runtime=await northflankStatus(id);
       const runtimeState=String(runtime?.status||runtime?.state||"").toLowerCase();
       if(["failed","error","canceled","cancelled"].includes(runtimeState)){
         await admin.rpc("fail_build_and_refund",{
