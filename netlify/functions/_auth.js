@@ -16,7 +16,7 @@ export async function ensureShadowUser(user){
  if(!sites?.length)await provisionInitialSite({id},{siteName:user.userMetadata?.site_name||"Mon Premier Site"});
  return id;
 }
-export async function authenticatedUser(){const user=await getNetlifyUser();if(!user)return null;const id=await ensureShadowUser(user);return{id,email:user.email,netlifyId:String(user.id),netlifyUser:user};}
+export async function authenticatedUser(req){const user=await getNetlifyUser(req);if(!user)return null;const id=await ensureShadowUser(user);return{id,email:user.email,netlifyId:String(user.id),netlifyUser:user};}
 export async function currentUser(){return await getNetlifyUser();}
 export async function provisionInitialSite(user,{siteName}={}){const r=await admin.rpc("provision_initial_site",{p_user_id:String(user.id),p_site_name:siteName||"Mon Premier Site"});if(r.error)throw r.error;return r.data;}
 export async function getSites(userId){const {data,error}=await admin.from("sites").select("id,name,subdomain,custom_domain,status,created_at").eq("user_id",userId).order("created_at",{ascending:false});if(error)throw error;return(data||[]).map(site=>({...site,user_role:"owner"}));}
