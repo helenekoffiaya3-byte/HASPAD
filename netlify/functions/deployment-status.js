@@ -1,6 +1,6 @@
 import { getUser } from "@netlify/identity";
 import { admin, json } from "./_credits.js";
-import { runtimeRequest } from "./_runtime.js";
+import { northflankStatus } from "./northflank-runtime.js";
 
 const env=n=>globalThis.Netlify?.env?.get?.(n)??process.env[n];
 
@@ -88,7 +88,7 @@ export default async req=>{
         });
         const refreshed=await admin.from("project_builds").select("*").eq("id",id).maybeSingle();
         if(refreshed.data)build=refreshed.data;
-      }else if(["ready","running","healthy","active"].includes(runtimeState)){
+      }else if(["running"].includes(runtimeState)){
         await admin.from("project_builds").update({
           status:"success",
           deploy_url:runtime?.publicUrl||runtime?.url||build.deploy_url||null,
