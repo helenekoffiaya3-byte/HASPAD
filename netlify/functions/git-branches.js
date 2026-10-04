@@ -3,7 +3,7 @@ import { listBranches } from "./_github.js";
 const json = (status, body) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json", "cache-control": "no-store" } });
 export default async (req) => {
   if (req.method !== "GET") return json(405, { error: "Method Not Allowed" });
-  const user = await getUser();
+  const user = await getUser(req);
   if (!user) return json(401, { error: "Unauthorized" });
   const full = String(new URL(req.url).searchParams.get("repo") || "");
   const match = /^([^/]+)\/([^/]+)$/.exec(full);
