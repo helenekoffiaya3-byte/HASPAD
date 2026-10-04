@@ -2,7 +2,7 @@ import { getUser } from "@netlify/identity";
 import { createRepo, listRepos } from "./_github.js";
 const json = (status, body) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json", "cache-control": "no-store" } });
 export default async (req) => {
-  const user = await getUser();
+  const user = await getUser(req);
   if (!user) return json(401, { error: "Unauthorized" });
   try {
     if (req.method === "GET") {
