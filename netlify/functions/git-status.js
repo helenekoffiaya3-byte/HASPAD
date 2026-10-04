@@ -12,7 +12,7 @@ async function netlifyJson(url){
 }
 export default async(req)=>{
   if(req.method!=="GET")return json(405,{error:"Method Not Allowed"});
-  const user=await getUser();if(!user)return json(401,{error:"Unauthorized"});
+  const user=await getUser(req);if(!user)return json(401,{error:"Unauthorized"});
   const siteId=new URL(req.url).searchParams.get("siteId");
   if(!siteId)return json(400,{error:"siteId requis."});
   const {data:build,error}=await admin.from("project_builds").select("*").eq("site_id",siteId).eq("user_id",user.id).order("build_number",{ascending:false}).limit(1).maybeSingle();
