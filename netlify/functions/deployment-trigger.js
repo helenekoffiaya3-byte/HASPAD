@@ -280,17 +280,15 @@ export default async (req) => {
     }).eq("id",creditedBuildId).eq("status","pending");
 
     if (targetRuntime === "docker") {
-      const runtime = await runtimeRequest("/v1/deploy", {
-        projectId: creditedBuildId,
-        runtimeId: creditedBuildId,
-        repositoryOwner: owner,
-        repositoryName: name,
+      const runtime = await deployNorthflank({
+        buildId: creditedBuildId,
+        owner,
+        name,
         branch,
         host,
         port,
-        healthcheckPath,
-        dockerfilePath: "Dockerfile"
-      }, "POST");
+        healthcheckPath
+      });
       netlifyAccepted = true;
       const runtimeStatus = String(runtime.status || "building").toLowerCase();
       if (runtimeStatus === "failed") throw new Error("NORTHFLANK_DEPLOYMENT_FAILED");
@@ -298,8 +296,8 @@ export default async (req) => {
       const savedRuntime = await admin.from("project_builds").update({
         status:persistedStatus, updated_at:new Date().toISOString(), deploy_url:runtime.publicUrl||null
       }).eq("id",creditedBuildId).eq("status","building").select("id").maybeSingle();
-      if (savedRuntime.error) throw new Error("RUNTIME_ACCEPTED_DB_SYNC_FAILED");
-      return json(202,{success:true,buildId:creditedBuildId,runtimeId:creditedBuildId,targetRuntime:"docker",host,publicUrl:runtime.publicUrl||null,health:runtimeStatus,remainingCredits:allocation.remaining_credits});
+      if (savedRuntime.error || !savedRuntime.data) throw new Error("RUNTIME_ACCEPTED_DB_SYNC_FAILED");
+      return json(202,{success:true,buildId:creditedBuildId,runtimeId:runtime.serviceId||creditedBuildId,targetRuntime:"docker",host,publicUrl:runtime.publicUrl||null,health:runtimeStatus,remainingCredits:allocation.remaining_credits});
     }
 
     // L'unique appel de lancement Netlify est ici.
@@ -320,9 +318,9 @@ export default async (req) => {
       command, branch, agents, remainingCredits:allocation.remaining_credits
     });
   } catch (error) {
-    if (creditedBuildId && !netlifyAccepted && targetRuntime === "docker" && env("HASPAD_RUNTIME_URL") && env("HASPAD_RUNTIME_SHARED_SECRET")) {
+    if (creditedBuildId && !netlifyAccepted && targetRuntime === "docker") {
       try {
-        const recovery = await runtimeRequest("/v1/status/" + encodeURIComponent(creditedBuildId), {}, "GET");
+        const recovery = await northflankStatus(creditedBuildId);
         const state = String(recovery?.status || recovery?.state || "").toLowerCase();
         if (["building","running","healthy","active"].includes(state)) netlifyAccepted = true;
       } catch {}
