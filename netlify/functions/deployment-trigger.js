@@ -313,6 +313,7 @@ export default async (req) => {
     const savedBuild = await admin.from("project_builds").update({
       status:"building", updated_at:new Date().toISOString(), netlify_deploy_id:build.deploy_id||null
     }).eq("id",creditedBuildId).select("id").maybeSingle();
+    if (savedBuild.error || !savedBuild.data) throw new Error("NETLIFY_BUILD_DB_SYNC_FAILED");
 
     return json(202, {
       success:true, buildId:creditedBuildId, netlifyBuildId:build.id, netlifyDeployId:build.deploy_id||null,
