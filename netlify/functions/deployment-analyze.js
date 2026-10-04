@@ -47,7 +47,7 @@ function safeCommand(command) {
 
 export default async (req) => {
   if (req.method !== "POST") return json(405, { error: "Method Not Allowed" });
-  const user = await getUser();
+  const user = await getUser(req);
   if (!user) return json(401, { error: "Unauthorized" });
 
   const body = await req.json().catch(() => null);
@@ -71,8 +71,15 @@ export default async (req) => {
     const connection = await githubConnection(user.id);
     if (!connection?.token) return json(400, { error: "GITHUB_NOT_CONNECTED" });
 
+    const repository = await gh("/repos/" + encodeURIComponent(owner) + "/" + encodeURIComponent(name), connection.token);
+    if (repository.archived) return json(422, { error: "REPOSITORY_ARCHIVED", deployable: false, blockers: ["Le dépôt GitHub est archivé et ne peut pas être déployé automatiquement."] });
+    const branchInfo = await gh("/repos/" + encodeURIComponent(owner) + "/" + encodeURIComponent(name) +
+      "/branches/" + encodeURIComponent(branch), connection.token);
+    if (!branchInfo?.name || String(branchInfo.name) !== branch) {
+      return json(422, { error: "BRANCH_NOT_FOUND", deployable: false, blockers: ["La branche sélectionnée n'existe pas dans le dépôt GitHub."] });
+    }
     const tree = await gh("/repos/" + encodeURIComponent(owner) + "/" + encodeURIComponent(name) +
-      "/git/trees/" + encodeURIComponent(branch) + "?recursive=1", connection.token);
+      "/git/trees/" + encodeURIComponent(branchInfo.commit?.sha || branch) + "?recursive=1", connection.token);
     const files = (tree.tree || []).filter(x => x.type === "blob" && x.path).map(x => x.path).filter(x => x.length <= 300);
     const selected = files.filter(important).slice(0, 160);
     const rootFiles = new Set(files.filter(p => !p.includes("/")));
@@ -88,6 +95,8 @@ export default async (req) => {
     const evidence = {
       targetRuntime,
       repository: owner + "/" + name,
+      repositoryId: repository.id,
+      branchSha: branchInfo.commit?.sha || null,
       branch,
       completeFileInventory: files,
       importantFiles: contents
