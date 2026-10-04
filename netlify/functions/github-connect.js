@@ -3,7 +3,7 @@ import { signedState } from "./_github.js";
 
 export default async (req) => {
   if (req.method !== "GET") return new Response("Method Not Allowed", { status: 405 });
-  const user = await getUser();
+  const user = await getUser(req);
   if (!user) return new Response("Unauthorized", { status: 401 });
   const clientId = globalThis.Netlify?.env?.get?.("GITHUB_CLIENT_ID");
   const redirectUri = globalThis.Netlify?.env?.get?.("GITHUB_OAUTH_REDIRECT_URI") || "https://haspad.com/.netlify/functions/github-callback";
