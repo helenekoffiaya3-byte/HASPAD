@@ -51,7 +51,7 @@ async function reconcileNetlify(build){
 
 export default async req=>{
   if(req.method!=="GET")return json(405,{error:"Method Not Allowed"});
-  const user=await getUser();
+  const user=await getUser(req);
   if(!user)return json(401,{error:"Unauthorized"});
 
   const id=new URL(req.url).searchParams.get("buildId");
