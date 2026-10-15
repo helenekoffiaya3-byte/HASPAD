@@ -30,6 +30,7 @@ function renderBuildState(d) {
     setDeploy(url ? "Déploiement réussi · " + url : "Déploiement réussi.");
     $("#deployButton").disabled = false;
     stopPolling();
+    activeBuildId = null;
     return true;
   }
 
@@ -37,6 +38,7 @@ function renderBuildState(d) {
     setDeploy("Déploiement échoué" + (build.error_message ? " : " + build.error_message : "."));
     $("#deployButton").disabled = false;
     stopPolling();
+    activeBuildId = null;
     return true;
   }
 

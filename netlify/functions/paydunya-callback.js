@@ -8,11 +8,11 @@ function parseForm(body) {
   try { return JSON.parse(raw); } catch { return null; }
 }
 
-export async function handler(event) {
-  if (event.httpMethod === "GET") return json(200, { ok: true, service: "paydunya-callback" });
-  if (event.httpMethod !== "POST") return json(405, { error: "METHOD_NOT_ALLOWED" });
+export default async (req) => {
+  if (req.method === "GET") return json(200, { ok: true, service: "paydunya-callback" });
+  if (req.method !== "POST") return json(405, { error: "METHOD_NOT_ALLOWED" });
   try {
-    const data = parseForm(event.body);
+    const data = parseForm(await req.text());
     if (!data || !verifyPaydunyaHash(data.hash)) return json(401, { error: "INVALID_CALLBACK_SIGNATURE" });
     const token = data.invoice?.token || data.token;
     const paymentId = data.invoice?.custom_data?.payment_id || data.custom_data?.payment_id;
