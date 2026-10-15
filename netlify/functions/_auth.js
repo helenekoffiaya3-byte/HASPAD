@@ -1,7 +1,7 @@
 import { getUser as getNetlifyUser } from "@netlify/identity";
 import { admin } from "./_db.js";
 import crypto from "crypto";
-export const json=(status,body,headers={})=>({statusCode:status,headers:{"content-type":"application/json","cache-control":"no-store",...headers},body:JSON.stringify(body)});
+export const json=(status,body,headers={})=>new Response(JSON.stringify(body),{status,headers:{"content-type":"application/json","cache-control":"no-store",...headers}});
 export const normalizeEmail=e=>String(e||"").trim().toLowerCase();
 export const validEmail=e=>/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
 export const validPassword=p=>typeof p==="string"&&p.length>=10&&p.length<=128;
