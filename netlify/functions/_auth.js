@@ -11,7 +11,7 @@ export async function ensureShadowUser(user){
  const id=String(user.id);
  await admin.from("profiles").upsert({id,full_name:user.userMetadata?.full_name||user.name||null,avatar_url:user.pictureUrl||null,is_email_verified:user.confirmedAt!=null,updated_at:new Date().toISOString()},{onConflict:"id"});
  const {data:credit}=await admin.from("user_credits").select("user_id").eq("user_id",id).maybeSingle();
- if(!credit){await admin.from("user_credits").insert({user_id:id,credits_balance:500});await admin.from("credit_transactions").insert({user_id:id,amount:500,type:"signup",reference_id:"signup:"+id,description:"500 crédits offerts à l'inscription",balance_after:500}).catch(()=>{});}
+ if(!credit){await admin.from("user_credits").insert({user_id:id,credits_balance:500});await admin.from("credit_transactions").insert({user_id:id,amount:500,type:"signup",reference_id:"signup:"+id,description:"500 crédits offerts à l'inscription",balance_after:500});}
  const {data:sites}=await admin.from("sites").select("id").eq("user_id",id).limit(1);
  if(!sites?.length)await provisionInitialSite({id},{siteName:user.userMetadata?.site_name||"Mon Premier Site"});
  return id;
