@@ -1,11 +1,11 @@
 import { getDatabase } from "@netlify/database";
 import crypto from "node:crypto";
 const db=getDatabase();
-export const json=(status,body,headers={})=>({statusCode:status,headers:{"content-type":"application/json","cache-control":"no-store",...headers},body:JSON.stringify(body)});
+export const json=(status,body,headers={})=>new Response(JSON.stringify(body),{status,headers:{"content-type":"application/json","cache-control":"no-store",...headers}});
 const id=v=>{v=String(v);if(!/^[A-Za-z_][A-Za-z0-9_]*$/.test(v))throw Error("INVALID_IDENTIFIER");return '"'+v+'"'};
 class Q{
  constructor(t){this.t=t;this.op="select";this.f="*";this.w=[];this.o=null;this.l=null;this.p=null;this.c=null;this.one=0;this.maybe=0;this.head=0}
- select(f="*",o={}){this.f=f;this.head=!!o.head;return this} eq(c,v){this.w.push([c,v]);return this}
+ select(f="*",o={}){this.f=f;this.head=!!o.head;return this} eq(c,v){this.w.push([c,v,"="]);return this} neq(c,v){this.w.push([c,v,"<>"]);return this}
  order(c,o={}){this.o=[c,o.ascending!==false];return this} limit(n){this.l=+n;return this}
  maybeSingle(){this.maybe=1;return this.run()} single(){this.one=1;return this.run()}
  insert(p){this.op="insert";this.p=p;return this} update(p){this.op="update";this.p=p;return this}
@@ -13,7 +13,7 @@ class Q{
  then(a,b){return this.run().then(a,b)}
  async run(){try{return await this.exec()}catch(error){return{data:null,error,count:null}}}
  async exec(){
-  const params=[];const where=this.w.map(([c,v])=>{params.push(v);if(c.includes("->>")){const [a,k]=c.split("->>");return id(a)+"->>"+JSON.stringify(k)+"=$"+params.length}return id(c)+"=$"+params.length}).join(" AND ");
+  const params=[];const where=this.w.map(([c,v,op="="])=>{params.push(v);if(c.includes("->>")){const [a,k]=c.split("->>");return id(a)+"->>"+JSON.stringify(k)+op+"$"+params.length}return id(c)+op+"$"+params.length}).join(" AND ");
   if(this.op==="select"){let s="SELECT "+this.f+" FROM "+id(this.t)+(where?" WHERE "+where:"");if(this.o)s+=" ORDER BY "+id(this.o[0])+" "+(this.o[1]?"ASC":"DESC");if(this.l)s+=" LIMIT "+this.l;if(this.head)s="SELECT count(*)::int count FROM "+id(this.t)+(where?" WHERE "+where:"");const r=await db.pool.query(s,params);if(this.head)return{data:null,error:null,count:r.rows[0]?.count||0};if(this.one||this.maybe){if(!r.rows[0])return{data:null,error:this.one?Error("ROW_NOT_FOUND"):null,count:0};return{data:r.rows[0],error:null,count:r.rowCount}}return{data:r.rows,error:null,count:r.rowCount}}
   if(this.op==="delete"){const r=await db.pool.query("DELETE FROM "+id(this.t)+(where?" WHERE "+where:"")+" RETURNING *",params);return{data:r.rows,error:null,count:r.rowCount}}
   const row=this.p||{};const cols=Object.keys(row);const vals=cols.map(c=>row[c]??null);let s;
@@ -99,5 +99,24 @@ async function refund(a){
   await c.query("commit");return n;
  }catch(e){await c.query("rollback").catch(()=>{});throw e}finally{c.release()}
 }
-async function payment(a){const p=(await db.pool.query("select * from payment_transactions where id=$1 for update",[a.p_payment_id])).rows[0];if(!p)throw Error("PAYMENT_NOT_FOUND");if(p.status!=="accepted")throw Error("PAYMENT_NOT_ACCEPTED");const u=(await db.pool.query("select credits_balance from user_credits where user_id=$1 for update",[p.user_id])).rows[0];if(p.processed_at)return u.credits_balance;const n=u.credits_balance+p.credits;await db.pool.query("update user_credits set credits_balance=$1,updated_at=now() where user_id=$2",[n,p.user_id]);await db.pool.query("insert into credit_transactions(user_id,amount,type,reference_id,description,balance_after) values($1,$2,'purchase',$3,$4,$5) on conflict(user_id,reference_id) do nothing",[p.user_id,p.credits,"payment:"+p.transaction_id,"Recharge HASPAD "+p.plan_type,n]);await db.pool.query("update payment_transactions set processed_at=now(),updated_at=now() where id=$1",[p.id]);return n}
+async function payment(a){
+ const c=await db.pool.connect();
+ try{
+  await c.query("begin");
+  const p=(await c.query("select * from payment_transactions where id=$1 for update",[a.p_payment_id])).rows[0];
+  if(!p){await c.query("rollback");throw Error("PAYMENT_NOT_FOUND")}
+  if(p.status!=="accepted"){await c.query("rollback");throw Error("PAYMENT_NOT_ACCEPTED")}
+  const u=(await c.query("select credits_balance from user_credits where user_id=$1 for update",[p.user_id])).rows[0];
+  if(!u){await c.query("rollback");throw Error("CREDIT_ACCOUNT_NOT_FOUND")}
+  if(p.processed_at){await c.query("commit");return u.credits_balance}
+  const credits=Number(p.credits);
+  if(!Number.isSafeInteger(credits)||credits<=0){await c.query("rollback");throw Error("INVALID_PAYMENT_CREDITS")}
+  const n=Number(u.credits_balance)+credits;
+  await c.query("update user_credits set credits_balance=$1,updated_at=now() where user_id=$2",[n,p.user_id]);
+  await c.query("insert into credit_transactions(user_id,amount,type,reference_id,description,balance_after) values($1,$2,'purchase',$3,$4,$5) on conflict(user_id,reference_id) do nothing",[p.user_id,credits,"payment:"+p.id,"Recharge HASPAD "+p.plan_type,n]);
+  await c.query("update payment_transactions set processed_at=now(),updated_at=now() where id=$1 and processed_at is null",[p.id]);
+  await c.query("commit");
+  return n;
+ }catch(e){await c.query("rollback").catch(()=>{});throw e}finally{c.release()}
+}
 async function provision(userId,siteName){const name=String(siteName||"Mon Premier Site").trim().slice(0,80)||"Mon Premier Site";const base=name.toLowerCase().normalize("NFKD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,"").slice(0,40)||"mon-site";for(let i=0;i<5;i++){try{const sub=base+"-"+crypto.randomBytes(3).toString("hex");const s=(await db.pool.query("insert into sites(user_id,name,subdomain,status) values($1,$2,$3,'draft') returning id,name,subdomain,custom_domain,status",[String(userId),name,sub])).rows[0];const root={id:"blk_root",type:"section",props:{semanticTag:"main"},styles:{desktop:{padding:"40px 20px"}},children:[{id:"blk_welcome_heading",type:"heading",props:{level:1,text:"Bienvenue sur "+name},styles:{desktop:{fontSize:"36px",textAlign:"center"}}}]};await db.pool.query("insert into pages(site_id,slug,seo,root_block) values($1,'index',$2,$3)",[s.id,JSON.stringify({title:"Accueil"}),JSON.stringify(root)]);await db.pool.query("insert into site_members(site_id,user_id,role) values($1,$2,'owner') on conflict(site_id,user_id) do nothing",[s.id,String(userId)]);return s}catch(e){if(e.code==="23505")continue;throw e}}throw Error("SITE_PROVISIONING_FAILED")}
